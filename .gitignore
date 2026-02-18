@@ -25,3 +25,5 @@ Thumbs.db
 
 *.mid
 *.midi
+!tests/assets/*.mid
+tests/output/

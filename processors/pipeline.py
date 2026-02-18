@@ -1,17 +1,18 @@
 """Processing Pipeline — orchestrates all MIDI processors in the correct order.
 
 Processing order (per-track):
-  0. Tempo Dedup       — remove redundant set_tempo meta events (all tracks)
-  1. Pitch Cluster     — merge near-pitch simultaneous notes (AI transcription noise)
-  2. Voice Merger      — consolidate channels to one voice, align chord durations
-  3. CC Filter         — remove sustain/legato CC messages
-  4. Triplet Remover   — convert triplet durations to straight eighths
-  5. Quantizer         — snap onset times and durations to grid (bar-aware)
-  6. Noise Filter      — remove short/quiet parasitic notes
-  7. Meta Cleanup      — strip stray tempo/time-sig events from data tracks
+  0. Tempo Dedup              — remove redundant set_tempo meta events (all tracks)
+  1. Pitch Cluster            — merge near-pitch simultaneous notes (AI transcription noise)
+  2. Voice Merger             — consolidate channels to one voice, align chord durations
+  3. CC Filter                — remove sustain/legato CC messages
+  4. Triplet Remover          — convert triplet durations to straight eighths
+  5. Quantizer                — snap onset times and durations to grid (bar-aware)
+  6. Noise Filter             — remove short/quiet parasitic notes
+  7. Same-Pitch Overlap Resolver — deduplicate overlapping same-pitch notes (per channel)
+  8. Meta Cleanup             — strip stray tempo/time-sig events from data tracks
 
 Post-processing (file-level):
-  8. Merge Tracks      — optionally flatten all tracks into a single MTrk
+  9. Merge Tracks             — optionally flatten all tracks into a single MTrk
 """
 
 import copy
@@ -26,6 +27,7 @@ from processors.triplet_remover import TripletRemover
 from processors.quantizer import Quantizer
 from processors.cc_filter import CCFilter
 from processors.noise_filter import NoiseFilter
+from processors.same_pitch_overlap_resolver import SamePitchOverlapResolver
 from processors.merge_tracks_to_single import MergeTracksToSingleTrack
 from utils.midi_helpers import (
     get_time_signature, calculate_bar_ticks,
@@ -139,7 +141,11 @@ class ProcessingPipeline:
         noise = NoiseFilter(config)
         result = noise.process(result, tpb)
 
-        # 6. Final chord alignment — ensure simultaneous notes have same duration
+        # 6. Same-Pitch Overlap Resolver
+        overlap = SamePitchOverlapResolver(config)
+        result = overlap.process(result, tpb)
+
+        # 7. Final chord alignment — ensure simultaneous notes have same duration
         #    (previous processors may have re-introduced mismatches)
         if config.get('merge_voices', True):
             result = self._final_chord_alignment(result)

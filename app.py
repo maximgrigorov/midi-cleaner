@@ -134,7 +134,10 @@ def process_midi():
     full_config = dict(DEFAULT_CONFIG)
     for key, value in config.items():
         if key in full_config or key == 'track_overrides':
-            full_config[key] = value
+            if isinstance(full_config.get(key), dict) and isinstance(value, dict):
+                full_config[key] = {**full_config[key], **value}
+            else:
+                full_config[key] = value
 
     try:
         mid = mido.MidiFile(original_path)

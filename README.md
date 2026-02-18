@@ -10,6 +10,7 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 - **Pitch Cluster Removal** — collapse tight bundles of near-pitch notes that start almost simultaneously (AI transcription artefact on FX/distortion tracks) into a single representative note
 - **Voice Merging** — consolidate voices 2/3/4 into voice 1 per track, align chord durations for single-voice output in Guitar Pro
 - **Overlap Resolution** — merge overlapping same-pitch notes (earliest onset, latest offset, highest velocity)
+- **Same-Pitch Overlap Resolver** — remove duplicate overlapping notes of the same pitch per (channel, pitch); keeps the longer/louder note, removes the weaker duplicate entirely (no trimming)
 - **Triplet Removal** — detect triplet durations and convert them to straight eighth notes
 - **Quantization** — snap note timing to a rhythmic grid (quarter / eighth / sixteenth), bar-aware clipping to prevent notes crossing bar boundaries
 - **CC Filtering** — strip MIDI Control Change messages (sustain CC#64, legato CC#68, or custom)
@@ -29,8 +30,9 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 |-----------|------|---------|-------------|
 | **Tempo Dedup: Enabled** | toggle | on | Remove duplicate `set_tempo` events. Keeps the first occurrence and any real tempo changes, strips identical repeats. |
 | **Pitch Cluster: Enabled** | toggle | on | Enable pitch-cluster denoising. When on, near-pitch notes that start within the onset window are merged into one note. |
-| **Pitch Cluster: Time Window** | ticks | 80 | Maximum onset spread (in MIDI ticks) for notes to be considered simultaneous. |
+| **Pitch Cluster: Time Window** | ticks | 20 | Maximum onset spread (in MIDI ticks) for notes to be considered simultaneous. |
 | **Pitch Cluster: Pitch Threshold** | semitones | 1 | Maximum semitone distance between notes in the same cluster. |
+| **Same-Pitch Overlap Resolver: Enabled** | toggle | on | Remove duplicate overlapping notes of the same pitch within each (channel, pitch). Keeps the longer note; tie-break by velocity then onset. |
 | **Merge Voices** | toggle | on | Consolidate all MIDI channels within each track to the primary channel. Aligns chord durations so Guitar Pro keeps everything in Voice 1. |
 | **Remove Overlaps** | toggle | on | When two notes of the same pitch overlap on the same channel, merge them into a single note spanning the full duration. |
 | **Remove Triplets** | toggle | on | Detect notes with triplet durations and convert them to straight eighth notes. |
@@ -60,9 +62,10 @@ Each track card has its own **Min Duration** and **Min Velocity** sliders that o
 4. **Triplet Remover** — convert triplet durations to straight eighths
 5. **Quantizer** — snap to grid, clip at bar boundaries
 6. **Noise Filter** — remove short/quiet notes
-7. **Final Chord Alignment** — ensure simultaneous notes have identical durations (prevents Guitar Pro multi-voice artifacts)
-8. **Meta Cleanup** — strip stray tempo/time-signature events from data tracks (Type 1 MIDI: these belong only in the conductor track)
-9. **Merge Tracks** *(file-level, optional)* — flatten all tracks into a single MTrk (Type 0) for manual cleanup
+7. **Same-Pitch Overlap Resolver** — deduplicate overlapping notes of the same pitch per (channel, pitch)
+8. **Final Chord Alignment** — ensure simultaneous notes have identical durations (prevents Guitar Pro multi-voice artifacts)
+9. **Meta Cleanup** — strip stray tempo/time-signature events from data tracks (Type 1 MIDI: these belong only in the conductor track)
+10. **Merge Tracks** *(file-level, optional)* — flatten all tracks into a single MTrk (Type 0) for manual cleanup
 
 ## Requirements
 
@@ -85,6 +88,25 @@ make run
 ```
 
 The app will be available at `http://localhost:5000`.
+
+## Running Tests
+
+```bash
+# Run all tests (including E2E)
+python -m pytest tests/ -v
+
+# Run only the end-to-end test
+python -m pytest tests/test_e2e_process.py -v
+```
+
+The E2E test uploads the test asset MIDI (`tests/assets/The Dragon and The Princess (FX).mid`),
+processes it with recommended settings, and saves the result to:
+
+```
+tests/output/The Dragon and The Princess (FX)_processed_by_tests.mid
+```
+
+No external services or GUI required — the test uses Flask's built-in test client.
 
 ## Deployment
 
@@ -133,22 +155,28 @@ Configuration variables in `Makefile`:
 ├── Makefile
 ├── requirements.txt
 ├── processors/
-│   ├── pipeline.py                # Processing orchestrator
-│   ├── tempo_deduplicator.py      # Redundant set_tempo removal
-│   ├── pitch_cluster.py           # Near-pitch simultaneous note clustering
-│   ├── voice_merger.py            # Channel merging + chord alignment
-│   ├── cc_filter.py               # Control Change message removal
-│   ├── triplet_remover.py         # Triplet detection and conversion
-│   ├── quantizer.py               # Bar-aware grid quantization
-│   ├── noise_filter.py            # Short/quiet note removal
-│   └── merge_tracks_to_single.py  # Multi-track → single-track flattener
+│   ├── pipeline.py                    # Processing orchestrator
+│   ├── tempo_deduplicator.py          # Redundant set_tempo removal
+│   ├── pitch_cluster.py              # Near-pitch simultaneous note clustering
+│   ├── voice_merger.py               # Channel merging + chord alignment
+│   ├── cc_filter.py                  # Control Change message removal
+│   ├── triplet_remover.py            # Triplet detection and conversion
+│   ├── quantizer.py                  # Bar-aware grid quantization
+│   ├── noise_filter.py               # Short/quiet note removal
+│   ├── same_pitch_overlap_resolver.py # Same-pitch overlap deduplication
+│   └── merge_tracks_to_single.py     # Multi-track → single-track flattener
 ├── utils/
 │   ├── midi_helpers.py     # MIDI utility functions
 │   ├── midi_analyzer.py    # Notation and playback data generation
 │   └── track_detector.py   # Instrument type detection
 ├── templates/
 │   └── index.html          # Single-page frontend
-└── static/
-    ├── css/style.css
-    └── js/app.js           # Frontend logic (upload, playback, notation, i18n)
+├── static/
+│   ├── css/style.css
+│   └── js/app.js           # Frontend logic (upload, playback, notation, i18n)
+└── tests/
+    ├── assets/              # Test MIDI files
+    ├── output/              # Processed MIDI artifacts (git-ignored)
+    ├── test_e2e_process.py  # End-to-end upload/process/download test
+    └── ...                  # Unit tests for individual processors
 ```

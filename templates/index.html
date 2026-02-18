@@ -132,6 +132,33 @@
                 </div>
             </div>
             <div class="config-item">
+                <label for="cfg-pitch-cluster">
+                    <span data-i18n="pitch_cluster">Pitch Cluster</span>
+                    <span class="desc" data-i18n="pitch_cluster_desc">Merge near-pitch simultaneous notes (AI transcription noise)</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-pitch-cluster" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="pitch_cluster_window">Time Window (ticks)</span>
+                    <span class="desc" data-i18n="pitch_cluster_window_desc">Max onset spread for notes to be considered simultaneous</span>
+                </label>
+                <div class="range-group">
+                    <input type="range" id="cfg-pitch-cluster-window" min="0" max="120" step="5" value="20">
+                    <span class="value">20</span>
+                </div>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="pitch_cluster_threshold">Pitch Threshold (semitones)</span>
+                    <span class="desc" data-i18n="pitch_cluster_threshold_desc">Max semitone distance within a cluster</span>
+                </label>
+                <div class="range-group">
+                    <input type="range" id="cfg-pitch-cluster-threshold" min="0" max="3" step="1" value="1">
+                    <span class="value">1</span>
+                </div>
+            </div>
+            <div class="config-item">
                 <label for="cfg-filter-noise">
                     <span data-i18n="noise_filter">Noise Filter</span>
                     <span class="desc" data-i18n="noise_filter_desc">Remove short and quiet parasitic notes</span>
@@ -157,6 +184,13 @@
                     <input type="range" id="cfg-min-velocity" min="0" max="127" step="1" value="20">
                     <span class="value">20</span>
                 </div>
+            </div>
+            <div class="config-item">
+                <label for="cfg-same-pitch-overlap">
+                    <span data-i18n="same_pitch_overlap">Same-Pitch Overlap Resolver</span>
+                    <span class="desc" data-i18n="same_pitch_overlap_desc">Remove duplicate overlapping notes of the same pitch per channel</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-same-pitch-overlap" checked><span class="slider"></span></label>
             </div>
             <div class="config-item">
                 <label>

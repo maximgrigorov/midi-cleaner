@@ -20,10 +20,20 @@ DEFAULT_CONFIG = {
     'remove_cc': True,
     'cc_numbers': [64, 68],  # 64=sustain, 68=legato
 
+    # Pitch cluster (merge near-pitch simultaneous notes)
+    'pitch_cluster': {
+        'enabled': True,
+        'time_window_ticks': 20,
+        'pitch_threshold': 1,
+    },
+
     # Noise filter
     'filter_noise': True,
     'min_duration_ticks': 120,
     'min_velocity': 20,
+
+    # Same-pitch overlap resolver
+    'same_pitch_overlap_resolver': {'enabled': True},
 
     # Processing range (1-indexed bar numbers)
     'start_bar': 1,
