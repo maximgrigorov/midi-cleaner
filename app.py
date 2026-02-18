@@ -6,10 +6,24 @@ import json
 import traceback
 
 import mido
+import mido.midifiles.meta as _mido_meta
 from flask import (
     Flask, request, jsonify, send_file,
     render_template, session,
 )
+
+# Patch mido to tolerate invalid key_signature events from AI-generated MIDI.
+# Suno and other AI tools produce garbage key values (e.g. 17 sharps) that
+# cause mido.MidiFile() to crash. We fall back to C major for invalid keys.
+_orig_ks_decode = _mido_meta.MetaSpec_key_signature.decode
+
+def _lenient_ks_decode(self, message, data):
+    try:
+        _orig_ks_decode(self, message, data)
+    except _mido_meta.KeySignatureError:
+        message.key = 'C'
+
+_mido_meta.MetaSpec_key_signature.decode = _lenient_ks_decode
 
 from config import DEFAULT_CONFIG
 from processors.pipeline import ProcessingPipeline
