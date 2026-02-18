@@ -1,6 +1,9 @@
 """Default configuration for MIDI Cleaner application."""
 
 DEFAULT_CONFIG = {
+    # Tempo deduplication (removes redundant set_tempo events)
+    'tempo_deduplicator': {'enabled': True},
+
     # Voice merging
     'merge_voices': True,
     'remove_overlaps': True,
@@ -24,6 +27,13 @@ DEFAULT_CONFIG = {
 
     # Processing range (1-indexed bar numbers)
     'start_bar': 1,
+
+    # Track flattener (merge all tracks into a single MTrk)
+    'merge_tracks': {
+        'enabled': False,
+        'include_cc': False,
+        'cc_whitelist': [64, 68],
+    },
 
     # Per-track overrides: { track_index: { param: value, ... } }
     'track_overrides': {},

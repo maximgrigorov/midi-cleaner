@@ -20,7 +20,11 @@ const I18N = {
         noise_filter: 'Noise Filter', noise_filter_desc: 'Remove short and quiet parasitic notes',
         min_duration: 'Min Note Duration (ticks)', min_duration_desc: 'Notes shorter than this are removed',
         min_velocity: 'Min Velocity', min_velocity_desc: 'Notes quieter than this are removed',
+        tempo_dedup: 'Deduplicate Tempo', tempo_dedup_desc: 'Remove redundant tempo markings (fixes ♩=91 spam)',
         start_bar: 'Start Processing from Bar', start_bar_desc: 'Skip already-cleaned bars (1 = all)',
+        merge_tracks: 'Merge All Tracks', merge_tracks_desc: 'Flatten into a single track (Type 0) for manual editing',
+        merge_tracks_cc: 'Include CC in Merge', merge_tracks_cc_desc: 'Keep CC events in the merged output',
+        merge_cc_whitelist: 'Merge CC Whitelist', merge_cc_whitelist_desc: 'Which CC numbers to keep (uncheck all = keep all)',
         player_title: 'Player', original: 'Original', processed: 'Processed',
         tracks: 'Tracks', notes: 'notes', show_notation: 'Show Notation',
         play: 'Play', stop: 'Stop', play_processed: 'Play Processed',
@@ -47,7 +51,11 @@ const I18N = {
         noise_filter: 'Фильтр шума', noise_filter_desc: 'Удалить короткие и тихие паразитные ноты',
         min_duration: 'Мин. длительность (тики)', min_duration_desc: 'Ноты короче этого удаляются',
         min_velocity: 'Мин. громкость', min_velocity_desc: 'Ноты тише этого удаляются',
+        tempo_dedup: 'Дедупликация темпа', tempo_dedup_desc: 'Удалить повторяющиеся темповые метки (убирает ♩=91 спам)',
         start_bar: 'Начать с такта', start_bar_desc: 'Пропустить очищенные такты (1 = всё)',
+        merge_tracks: 'Объединить дорожки', merge_tracks_desc: 'Слить все дорожки в одну (Type 0) для ручной правки',
+        merge_tracks_cc: 'CC в объединении', merge_tracks_cc_desc: 'Сохранить CC события в объединённом выводе',
+        merge_cc_whitelist: 'CC белый список', merge_cc_whitelist_desc: 'Какие CC номера сохранить (без выбора = все)',
         player_title: 'Плеер', original: 'Оригинал', processed: 'Обработанный',
         tracks: 'Дорожки', notes: 'нот', show_notation: 'Ноты',
         play: 'Воспр.', stop: 'Стоп', play_processed: 'Воспр. обработанный',
@@ -186,6 +194,7 @@ function showConfig() { $('.config-panel').classList.add('visible'); }
 
 function readGlobalConfig() {
     return {
+        tempo_deduplicator: { enabled: $('#cfg-tempo-dedup').checked },
         merge_voices: $('#cfg-merge-voices').checked,
         remove_overlaps: $('#cfg-remove-overlaps').checked,
         remove_triplets: $('#cfg-remove-triplets').checked,
@@ -198,6 +207,11 @@ function readGlobalConfig() {
         min_duration_ticks: parseInt($('#cfg-min-duration').value),
         min_velocity: parseInt($('#cfg-min-velocity').value),
         start_bar: parseInt($('#cfg-start-bar').value),
+        merge_tracks: {
+            enabled: $('#cfg-merge-tracks').checked,
+            include_cc: $('#cfg-merge-cc').checked,
+            cc_whitelist: [$('#cfg-merge-cc-64').checked && 64, $('#cfg-merge-cc-68').checked && 68].filter(Boolean),
+        },
         track_overrides: readTrackOverrides(),
     };
 }
