@@ -6,12 +6,15 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 
 ## Features
 
+- **Tempo Deduplication** — remove redundant `set_tempo` meta events that cause notation software to show ♩=91 on every bar; real tempo changes are preserved
+- **Pitch Cluster Removal** — collapse tight bundles of near-pitch notes that start almost simultaneously (AI transcription artefact on FX/distortion tracks) into a single representative note
 - **Voice Merging** — consolidate voices 2/3/4 into voice 1 per track, align chord durations for single-voice output in Guitar Pro
 - **Overlap Resolution** — merge overlapping same-pitch notes (earliest onset, latest offset, highest velocity)
 - **Triplet Removal** — detect triplet durations and convert them to straight eighth notes
 - **Quantization** — snap note timing to a rhythmic grid (quarter / eighth / sixteenth), bar-aware clipping to prevent notes crossing bar boundaries
 - **CC Filtering** — strip MIDI Control Change messages (sustain CC#64, legato CC#68, or custom)
 - **Noise Filter** — remove parasitic short/quiet notes with configurable thresholds per track
+- **Track Flattener** — optionally merge all tracks into a single MTrk (Type 0) for easier manual cleanup in a notation editor
 - **VexFlow Notation** — sheet music preview for each track with treble/bass clef and Guitar TAB
 - **Tone.js Playback** — play individual tracks or the full MIDI in the browser with transport controls (play, pause, stop, rewind, seek)
 - **Comparison** — switch between original and processed versions for notation and playback
@@ -24,6 +27,10 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
+| **Tempo Dedup: Enabled** | toggle | on | Remove duplicate `set_tempo` events. Keeps the first occurrence and any real tempo changes, strips identical repeats. |
+| **Pitch Cluster: Enabled** | toggle | on | Enable pitch-cluster denoising. When on, near-pitch notes that start within the onset window are merged into one note. |
+| **Pitch Cluster: Time Window** | ticks | 80 | Maximum onset spread (in MIDI ticks) for notes to be considered simultaneous. |
+| **Pitch Cluster: Pitch Threshold** | semitones | 1 | Maximum semitone distance between notes in the same cluster. |
 | **Merge Voices** | toggle | on | Consolidate all MIDI channels within each track to the primary channel. Aligns chord durations so Guitar Pro keeps everything in Voice 1. |
 | **Remove Overlaps** | toggle | on | When two notes of the same pitch overlap on the same channel, merge them into a single note spanning the full duration. |
 | **Remove Triplets** | toggle | on | Detect notes with triplet durations and convert them to straight eighth notes. |
@@ -36,6 +43,9 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 | **Min Note Duration** | 0–480 ticks | 120 | Notes shorter than this (in MIDI ticks) are removed. At 480 PPQ: 120 ticks = sixteenth note. |
 | **Min Velocity** | 0–127 | 20 | Notes with MIDI velocity below this are removed. |
 | **Start Processing from Bar** | 1–999 | 1 | Skip already-cleaned bars. Set to 1 to process everything, or higher to preserve manually cleaned sections at the beginning. |
+| **Merge Tracks: Enabled** | toggle | off | Flatten all tracks into a single MTrk (Type 0 MIDI). Useful for manual cleanup in a notation editor. |
+| **Merge Tracks: Include CC** | toggle | off | Include CC events in the merged output. When off, all CC messages are stripped during merge. |
+| **Merge Tracks: CC Whitelist** | list | 64, 68 | When Include CC is on, only these CC numbers are kept. Empty list = keep all CC. |
 
 ### Per-Track Overrides
 
@@ -43,13 +53,16 @@ Each track card has its own **Min Duration** and **Min Velocity** sliders that o
 
 ### Processing Pipeline Order
 
-1. **Voice Merger** — merge channels, resolve same-pitch overlaps, align chord durations
-2. **CC Filter** — remove sustain/legato CC messages
-3. **Triplet Remover** — convert triplet durations to straight eighths
-4. **Quantizer** — snap to grid, clip at bar boundaries
-5. **Noise Filter** — remove short/quiet notes
-6. **Final Chord Alignment** — ensure simultaneous notes have identical durations (prevents Guitar Pro multi-voice artifacts)
-7. **Meta Cleanup** — strip stray tempo/time-signature events from data tracks (Type 1 MIDI: these belong only in the conductor track)
+0. **Tempo Deduplicator** — remove redundant `set_tempo` meta events (runs on all tracks including conductor)
+1. **Pitch Cluster Processor** — collapse near-pitch simultaneous note bundles to a single note
+2. **Voice Merger** — merge channels, resolve same-pitch overlaps, align chord durations
+3. **CC Filter** — remove sustain/legato CC messages
+4. **Triplet Remover** — convert triplet durations to straight eighths
+5. **Quantizer** — snap to grid, clip at bar boundaries
+6. **Noise Filter** — remove short/quiet notes
+7. **Final Chord Alignment** — ensure simultaneous notes have identical durations (prevents Guitar Pro multi-voice artifacts)
+8. **Meta Cleanup** — strip stray tempo/time-signature events from data tracks (Type 1 MIDI: these belong only in the conductor track)
+9. **Merge Tracks** *(file-level, optional)* — flatten all tracks into a single MTrk (Type 0) for manual cleanup
 
 ## Requirements
 
@@ -120,12 +133,15 @@ Configuration variables in `Makefile`:
 ├── Makefile
 ├── requirements.txt
 ├── processors/
-│   ├── pipeline.py         # Processing orchestrator
-│   ├── voice_merger.py     # Channel merging + chord alignment
-│   ├── cc_filter.py        # Control Change message removal
-│   ├── triplet_remover.py  # Triplet detection and conversion
-│   ├── quantizer.py        # Bar-aware grid quantization
-│   └── noise_filter.py     # Short/quiet note removal
+│   ├── pipeline.py                # Processing orchestrator
+│   ├── tempo_deduplicator.py      # Redundant set_tempo removal
+│   ├── pitch_cluster.py           # Near-pitch simultaneous note clustering
+│   ├── voice_merger.py            # Channel merging + chord alignment
+│   ├── cc_filter.py               # Control Change message removal
+│   ├── triplet_remover.py         # Triplet detection and conversion
+│   ├── quantizer.py               # Bar-aware grid quantization
+│   ├── noise_filter.py            # Short/quiet note removal
+│   └── merge_tracks_to_single.py  # Multi-track → single-track flattener
 ├── utils/
 │   ├── midi_helpers.py     # MIDI utility functions
 │   ├── midi_analyzer.py    # Notation and playback data generation

@@ -1,12 +1,17 @@
 """Processing Pipeline — orchestrates all MIDI processors in the correct order.
 
-Processing order:
-  1. Voice Merger      — consolidate channels to one voice, align chord durations
-  2. CC Filter         — remove sustain/legato CC messages
-  3. Triplet Remover   — convert triplet durations to straight eighths
-  4. Quantizer         — snap onset times and durations to grid (bar-aware)
-  5. Noise Filter      — remove short/quiet parasitic notes
-  6. Meta Cleanup      — strip stray tempo/time-sig events from data tracks
+Processing order (per-track):
+  0. Tempo Dedup       — remove redundant set_tempo meta events (all tracks)
+  1. Pitch Cluster     — merge near-pitch simultaneous notes (AI transcription noise)
+  2. Voice Merger      — consolidate channels to one voice, align chord durations
+  3. CC Filter         — remove sustain/legato CC messages
+  4. Triplet Remover   — convert triplet durations to straight eighths
+  5. Quantizer         — snap onset times and durations to grid (bar-aware)
+  6. Noise Filter      — remove short/quiet parasitic notes
+  7. Meta Cleanup      — strip stray tempo/time-sig events from data tracks
+
+Post-processing (file-level):
+  8. Merge Tracks      — optionally flatten all tracks into a single MTrk
 """
 
 import copy
@@ -14,11 +19,14 @@ from collections import defaultdict
 
 import mido
 
+from processors.tempo_deduplicator import TempoDeduplicator
+from processors.pitch_cluster import PitchClusterProcessor
 from processors.voice_merger import VoiceMerger
 from processors.triplet_remover import TripletRemover
 from processors.quantizer import Quantizer
 from processors.cc_filter import CCFilter
 from processors.noise_filter import NoiseFilter
+from processors.merge_tracks_to_single import MergeTracksToSingleTrack
 from utils.midi_helpers import (
     get_time_signature, calculate_bar_ticks,
     extract_note_pairs, extract_non_note_messages, rebuild_track_from_pairs,
@@ -58,12 +66,17 @@ class ProcessingPipeline:
         bar_ticks = calculate_bar_ticks(tpb, time_sig)
         processing_start_tick = (self.start_bar - 1) * bar_ticks
 
+        tempo_dedup = TempoDeduplicator(self.config)
+
         for track_idx, track in enumerate(midi_file.tracks):
             track_info = get_track_info(track, track_idx, tpb)
 
-            # Skip tracks without notes (tempo track, etc.) — deep copy as-is
+            # Tempo deduplication runs on ALL tracks (conductor Track 0 included)
+            deduped = tempo_dedup.process(copy.deepcopy(track), tpb)
+
+            # Tracks without notes (tempo track, etc.) — keep after dedup
             if not track_info['has_notes']:
-                output.tracks.append(copy.deepcopy(track))
+                output.tracks.append(deduped)
                 continue
 
             # Get per-track config overrides
@@ -71,7 +84,7 @@ class ProcessingPipeline:
 
             # Process the track
             processed = self._process_track(
-                track, tpb, track_config, processing_start_tick, time_sig
+                deduped, tpb, track_config, processing_start_tick, time_sig
             )
 
             # Clean up: remove conductor-only meta events from data tracks
@@ -79,6 +92,9 @@ class ProcessingPipeline:
             processed = self._strip_conductor_meta(processed)
 
             output.tracks.append(processed)
+
+        # File-level: optionally flatten all tracks into a single MTrk
+        output = MergeTracksToSingleTrack(self.config).process(output)
 
         return output
 
@@ -98,6 +114,10 @@ class ProcessingPipeline:
     def _apply_processors(self, track, tpb, config, time_sig=(4, 4)):
         """Apply all processing steps in order."""
         result = track
+
+        # 0. Pitch Cluster — collapse near-pitch simultaneous notes before any merging
+        pitch_cluster = PitchClusterProcessor(config)
+        result = pitch_cluster.process(result, tpb)
 
         # 1. Voice Merger
         merger = VoiceMerger(config)
