@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI Cleaner</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/vexflow@4.2.5/build/cjs/vexflow.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+</head>
+<body>
+
+<header>
+    <div>
+        <h1><span>MIDI</span> <span data-i18n="title">Cleaner</span></h1>
+        <div class="subtitle" data-i18n="subtitle">Clean multi-track MIDI files from AI transcription artifacts</div>
+    </div>
+    <button id="lang-toggle" class="btn-lang" title="Switch language">RU</button>
+</header>
+
+<main>
+    <!-- Upload Zone -->
+    <section>
+        <div class="drop-zone" id="drop-zone">
+            <div class="icon">&#128196;</div>
+            <p data-i18n="drop_zone">Drop MIDI file here or click to browse</p>
+            <input type="file" accept=".mid,.midi">
+        </div>
+    </section>
+
+    <!-- File Info -->
+    <div class="file-info"></div>
+
+    <!-- Full Player -->
+    <section class="player-section" id="player-section">
+        <h2 data-i18n="player_title">Player</h2>
+        <div class="player-bar">
+            <div class="player-controls">
+                <button id="player-rewind" class="player-btn" title="Rewind">&#9198;</button>
+                <button id="player-play" class="player-btn play-btn" title="Play">&#9654;</button>
+                <button id="player-pause" class="player-btn" title="Pause" style="display:none">&#9646;&#9646;</button>
+                <button id="player-stop" class="player-btn" title="Stop">&#9632;</button>
+            </div>
+            <div class="player-timeline">
+                <input type="range" id="player-seek" min="0" max="1000" value="0" step="1">
+                <div class="player-time">
+                    <span id="player-current">0:00</span> / <span id="player-total">0:00</span>
+                </div>
+            </div>
+            <div class="player-source-toggle">
+                <button id="player-src-original" class="player-src-btn active" data-i18n="original">Original</button>
+                <button id="player-src-processed" class="player-src-btn" data-i18n="processed" disabled>Processed</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Global Configuration -->
+    <section class="config-panel">
+        <h2 data-i18n="processing_settings">Processing Settings</h2>
+        <div class="config-grid">
+            <div class="config-item">
+                <label for="cfg-merge-voices">
+                    <span data-i18n="merge_voices">Merge Voices</span>
+                    <span class="desc" data-i18n="merge_voices_desc">Consolidate all voices to voice 1 per track</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-merge-voices" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label for="cfg-remove-overlaps">
+                    <span data-i18n="remove_overlaps">Remove Overlaps</span>
+                    <span class="desc" data-i18n="remove_overlaps_desc">Merge overlapping same-pitch notes</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-remove-overlaps" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label for="cfg-remove-triplets">
+                    <span data-i18n="remove_triplets">Remove Triplets</span>
+                    <span class="desc" data-i18n="remove_triplets_desc">Convert triplet notes to straight eighths</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-remove-triplets" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="triplet_tolerance">Triplet Tolerance</span>
+                    <span class="desc" data-i18n="triplet_tolerance_desc">Detection sensitivity (0.05=strict, 0.25=loose)</span>
+                </label>
+                <div class="range-group">
+                    <input type="range" id="cfg-triplet-tolerance" min="0.05" max="0.30" step="0.01" value="0.15">
+                    <span class="value">0.15</span>
+                </div>
+            </div>
+            <div class="config-item">
+                <label for="cfg-quantize">
+                    <span data-i18n="quantize">Quantize</span>
+                    <span class="desc" data-i18n="quantize_desc">Snap note timing to rhythmic grid</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-quantize" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label for="cfg-quantize-grid">
+                    <span data-i18n="grid_resolution">Grid Resolution</span>
+                    <span class="desc" data-i18n="grid_resolution_desc">Quantization grid size</span>
+                </label>
+                <select id="cfg-quantize-grid">
+                    <option value="quarter" data-i18n-opt="quarter">Quarter note</option>
+                    <option value="eighth" selected data-i18n-opt="eighth">Eighth note</option>
+                    <option value="sixteenth" data-i18n-opt="sixteenth">Sixteenth note</option>
+                </select>
+            </div>
+            <div class="config-item">
+                <label for="cfg-remove-cc">
+                    <span data-i18n="remove_cc">Remove CC Messages</span>
+                    <span class="desc" data-i18n="remove_cc_desc">Strip control change messages</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-remove-cc" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="cc_to_remove">CC Numbers to Remove</span>
+                    <span class="desc" data-i18n="cc_to_remove_desc">Select which CC to strip</span>
+                </label>
+                <div style="display:flex;gap:12px;align-items:center">
+                    <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="cfg-cc-64" checked> CC#64 (Sustain)</label>
+                    <label style="font-size:12px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="cfg-cc-68" checked> CC#68 (Legato)</label>
+                </div>
+            </div>
+            <div class="config-item">
+                <label for="cfg-filter-noise">
+                    <span data-i18n="noise_filter">Noise Filter</span>
+                    <span class="desc" data-i18n="noise_filter_desc">Remove short and quiet parasitic notes</span>
+                </label>
+                <label class="toggle"><input type="checkbox" id="cfg-filter-noise" checked><span class="slider"></span></label>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="min_duration">Min Note Duration (ticks)</span>
+                    <span class="desc" data-i18n="min_duration_desc">Notes shorter than this are removed</span>
+                </label>
+                <div class="range-group">
+                    <input type="range" id="cfg-min-duration" min="0" max="480" step="10" value="120">
+                    <span class="value">120</span>
+                </div>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="min_velocity">Min Velocity</span>
+                    <span class="desc" data-i18n="min_velocity_desc">Notes quieter than this are removed</span>
+                </label>
+                <div class="range-group">
+                    <input type="range" id="cfg-min-velocity" min="0" max="127" step="1" value="20">
+                    <span class="value">20</span>
+                </div>
+            </div>
+            <div class="config-item">
+                <label>
+                    <span data-i18n="start_bar">Start Processing from Bar</span>
+                    <span class="desc" data-i18n="start_bar_desc">Skip already-cleaned bars (1 = process everything)</span>
+                </label>
+                <input type="number" id="cfg-start-bar" min="1" max="999" value="1">
+            </div>
+        </div>
+    </section>
+
+    <!-- Tracks List -->
+    <section class="tracks-list"></section>
+
+    <!-- Action Bar -->
+    <div class="action-bar">
+        <div class="status"></div>
+        <div style="display:flex;gap:8px;align-items:center">
+            <button id="btn-download" class="btn btn-success" style="display:none">&#11015; <span data-i18n="download_btn">Download</span></button>
+            <button id="btn-process" class="btn btn-primary">&#9881; <span data-i18n="process_btn">Process &amp; Clean</span></button>
+        </div>
+    </div>
+</main>
+
+<div class="toast-container"></div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
