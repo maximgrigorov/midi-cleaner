@@ -3,6 +3,7 @@
 import os
 import uuid
 import json
+import threading
 import traceback
 
 import mido
@@ -27,6 +28,7 @@ _mido_meta.MetaSpec_key_signature.decode = _lenient_ks_decode
 
 from config import DEFAULT_CONFIG
 from processors.pipeline import ProcessingPipeline
+from optimizers.auto_tuner import AutoTuner, score_midi
 from utils.track_detector import get_track_info, suggest_thresholds
 from utils.midi_analyzer import (
     analyze_track_for_notation,
@@ -271,6 +273,185 @@ def all_tracks_playback():
             'bpm': bpm,
             'duration': round(total_duration, 2),
             'tracks': tracks,
+        })
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ── Optimization state (per-session, in-memory) ──
+
+_optimize_state: dict[str, dict] = {}
+_optimize_lock = threading.Lock()
+
+
+def _run_optimization(session_id: str, midi_path: str, max_trials: int):
+    """Background worker for optimization."""
+    try:
+        mid = mido.MidiFile(midi_path)
+
+        def on_trial(tr):
+            with _optimize_lock:
+                st = _optimize_state.get(session_id)
+                if st:
+                    st['current_trial'] = tr.number + 1
+                    st['best_score'] = max(st['best_score'], tr.score)
+                    st['current_params'] = tr.params
+                    st['trials'].append({
+                        'number': tr.number,
+                        'score': tr.score,
+                        'params': tr.params,
+                        'metrics': tr.metrics,
+                    })
+
+        tuner = AutoTuner(mid, max_trials=max_trials, callback=on_trial)
+
+        with _optimize_lock:
+            st = _optimize_state.get(session_id)
+            if st:
+                st['track_type'] = tuner.track_type
+
+        result = tuner.optimize()
+
+        # Apply the best config and save processed file
+        pipeline = ProcessingPipeline(result.best_config)
+        processed = pipeline.process(mid)
+
+        session_dir = os.path.join(UPLOAD_DIR, session_id)
+        os.makedirs(session_dir, exist_ok=True)
+        optimized_path = os.path.join(session_dir, 'optimized.mid')
+        processed.save(optimized_path)
+
+        with _optimize_lock:
+            st = _optimize_state.get(session_id)
+            if st:
+                st['status'] = 'done'
+                st['best_score'] = result.best_score
+                st['best_params'] = result.best_params
+                st['best_config'] = result.best_config
+                st['stop_reason'] = result.stop_reason
+                st['optimized_path'] = optimized_path
+                st['total_trials'] = len(result.trials)
+
+    except Exception as e:
+        traceback.print_exc()
+        with _optimize_lock:
+            st = _optimize_state.get(session_id)
+            if st:
+                st['status'] = 'error'
+                st['error'] = str(e)
+
+
+@app.route('/api/optimize', methods=['POST'])
+def start_optimization():
+    if 'original_path' not in session:
+        return jsonify({'error': 'No file uploaded. Please upload a MIDI file first.'}), 400
+
+    original_path = session['original_path']
+    if not os.path.exists(original_path):
+        return jsonify({'error': 'Original file not found. Please re-upload.'}), 404
+
+    sid = session.get('session_id', str(uuid.uuid4()))
+
+    try:
+        body = json.loads(request.data) if request.data else {}
+    except json.JSONDecodeError:
+        body = {}
+    max_trials = min(int(body.get('max_trials', 40)), 100)
+
+    with _optimize_lock:
+        existing = _optimize_state.get(sid)
+        if existing and existing.get('status') == 'running':
+            return jsonify({'error': 'Optimization already in progress'}), 409
+
+        _optimize_state[sid] = {
+            'status': 'running',
+            'current_trial': 0,
+            'total_trials': max_trials,
+            'best_score': float('-inf'),
+            'best_params': {},
+            'best_config': {},
+            'current_params': {},
+            'track_type': '',
+            'trials': [],
+            'stop_reason': '',
+            'error': None,
+            'optimized_path': None,
+        }
+
+    t = threading.Thread(
+        target=_run_optimization,
+        args=(sid, original_path, max_trials),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({'status': 'started', 'max_trials': max_trials})
+
+
+@app.route('/api/optimize/status')
+def optimization_status():
+    sid = session.get('session_id')
+    if not sid:
+        return jsonify({'error': 'No session'}), 400
+
+    with _optimize_lock:
+        st = _optimize_state.get(sid)
+
+    if not st:
+        return jsonify({'status': 'idle'})
+
+    resp = {
+        'status': st['status'],
+        'current_trial': st['current_trial'],
+        'total_trials': st['total_trials'],
+        'best_score': st['best_score'] if st['best_score'] != float('-inf') else None,
+        'best_params': st['best_params'],
+        'current_params': st['current_params'],
+        'track_type': st['track_type'],
+        'stop_reason': st['stop_reason'],
+        'trials': st['trials'],
+    }
+    if st.get('error'):
+        resp['error'] = st['error']
+    if st.get('best_config'):
+        resp['best_config'] = st['best_config']
+
+    return jsonify(resp)
+
+
+@app.route('/api/optimize/apply', methods=['POST'])
+def apply_optimized():
+    """Apply the optimized result — copy optimized.mid as the processed file."""
+    sid = session.get('session_id')
+    if not sid:
+        return jsonify({'error': 'No session'}), 400
+
+    with _optimize_lock:
+        st = _optimize_state.get(sid)
+
+    if not st or st['status'] != 'done':
+        return jsonify({'error': 'No completed optimization'}), 400
+
+    optimized_path = st.get('optimized_path')
+    if not optimized_path or not os.path.exists(optimized_path):
+        return jsonify({'error': 'Optimized file not found'}), 404
+
+    session['processed_path'] = optimized_path
+
+    try:
+        mid = mido.MidiFile(optimized_path)
+        tracks_info = []
+        for idx, track in enumerate(mid.tracks):
+            info = get_track_info(track, idx, mid.ticks_per_beat)
+            info['note_range'] = list(info['note_range'])
+            tracks_info.append(info)
+
+        return jsonify({
+            'success': True,
+            'tracks': tracks_info,
+            'best_params': st['best_params'],
+            'best_score': st['best_score'],
         })
     except Exception as e:
         traceback.print_exc()

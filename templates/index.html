@@ -226,6 +226,57 @@
         </div>
     </section>
 
+    <!-- Auto Optimize Panel -->
+    <section class="optimize-panel" id="optimize-panel">
+        <h2 data-i18n="auto_optimize">Auto Optimize</h2>
+        <div class="optimize-body">
+            <div class="optimize-controls">
+                <div class="config-item">
+                    <label>
+                        <span data-i18n="opt_max_trials">Max Trials</span>
+                        <span class="desc" data-i18n="opt_max_trials_desc">Maximum optimization iterations (1–100)</span>
+                    </label>
+                    <input type="number" id="opt-max-trials" min="1" max="100" value="40">
+                </div>
+                <button id="btn-optimize" class="btn btn-primary" style="margin-top:8px">
+                    &#9881; <span data-i18n="opt_start">Start Optimization</span>
+                </button>
+            </div>
+            <div class="optimize-status" id="optimize-status" style="display:none">
+                <div class="optimize-progress">
+                    <div class="optimize-stat">
+                        <span class="optimize-label" data-i18n="opt_trial">Trial</span>
+                        <span class="optimize-value" id="opt-trial">0 / 40</span>
+                    </div>
+                    <div class="optimize-stat">
+                        <span class="optimize-label" data-i18n="opt_best_score">Best Score</span>
+                        <span class="optimize-value" id="opt-best-score">&mdash;</span>
+                    </div>
+                    <div class="optimize-stat">
+                        <span class="optimize-label" data-i18n="opt_track_type">Track Type</span>
+                        <span class="optimize-value" id="opt-track-type">&mdash;</span>
+                    </div>
+                    <div class="optimize-stat">
+                        <span class="optimize-label" data-i18n="opt_status_label">Status</span>
+                        <span class="optimize-value" id="opt-status-text">
+                            <div class="spinner" style="display:inline-block;vertical-align:middle"></div>
+                            <span data-i18n="opt_running">Running...</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="optimize-params" id="optimize-params">
+                    <h3 data-i18n="opt_current_params">Current Best Parameters</h3>
+                    <pre id="opt-params-json">{}</pre>
+                </div>
+                <div class="optimize-done-actions" id="optimize-done-actions" style="display:none">
+                    <button id="btn-apply-optimized" class="btn btn-success">
+                        &#10004; <span data-i18n="opt_apply">Apply Best Parameters</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- Tracks List -->
     <section class="tracks-list"></section>
 

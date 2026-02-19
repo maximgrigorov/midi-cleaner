@@ -35,6 +35,13 @@ const I18N = {
         process_btn: 'Process & Clean', download_btn: 'Download',
         shorter_removed: 'Shorter notes removed', quieter_removed: 'Quieter notes removed',
         min_dur_ticks: 'Min Duration (ticks)', min_vel: 'Min Velocity',
+        auto_optimize: 'Auto Optimize',
+        opt_max_trials: 'Max Trials', opt_max_trials_desc: 'Maximum optimization iterations (1–100)',
+        opt_start: 'Start Optimization', opt_trial: 'Trial', opt_best_score: 'Best Score',
+        opt_track_type: 'Track Type', opt_status_label: 'Status', opt_running: 'Running...',
+        opt_current_params: 'Current Best Parameters', opt_apply: 'Apply Best Parameters',
+        opt_done: 'Done', opt_stopped: 'Stopped', opt_error: 'Error',
+        opt_applied: 'Optimized parameters applied! Click Download.',
         loaded_msg: 'Loaded', processing_msg: 'Processing...', process_done: 'Processing complete! Click Download.',
         no_notes: 'No notes to play', upload_fail: 'Upload failed', process_fail: 'Processing failed',
         loading_notation: 'Loading notation...', no_notes_track: 'No notes in this track',
@@ -70,6 +77,13 @@ const I18N = {
         process_btn: 'Обработать', download_btn: 'Скачать',
         shorter_removed: 'Короткие ноты удаляются', quieter_removed: 'Тихие ноты удаляются',
         min_dur_ticks: 'Мин. длительность (тики)', min_vel: 'Мин. громкость',
+        auto_optimize: 'Авто-оптимизация',
+        opt_max_trials: 'Макс. итераций', opt_max_trials_desc: 'Максимальное число итераций оптимизации (1–100)',
+        opt_start: 'Запустить оптимизацию', opt_trial: 'Итерация', opt_best_score: 'Лучший балл',
+        opt_track_type: 'Тип дорожки', opt_status_label: 'Статус', opt_running: 'Выполняется...',
+        opt_current_params: 'Лучшие параметры', opt_apply: 'Применить лучшие параметры',
+        opt_done: 'Готово', opt_stopped: 'Остановлено', opt_error: 'Ошибка',
+        opt_applied: 'Оптимизированные параметры применены! Нажмите Скачать.',
         loaded_msg: 'Загружен', processing_msg: 'Обработка...', process_done: 'Готово! Нажмите Скачать.',
         no_notes: 'Нет нот для воспроизведения', upload_fail: 'Ошибка загрузки', process_fail: 'Ошибка обработки',
         loading_notation: 'Загрузка нотации...', no_notes_track: 'Нет нот в дорожке',
@@ -171,6 +185,7 @@ async function uploadFile(file) {
 
         showFileInfo(data);
         showConfig();
+        showOptimizePanel();
         showTracks(data.tracks);
         showActionBar();
         showPlayerSection();
@@ -373,6 +388,127 @@ async function processFile() {
 }
 
 function downloadFile() { window.location.href = '/api/download'; }
+
+// ─────────────────────────────────────────────
+//  Auto Optimize
+// ─────────────────────────────────────────────
+let optimizePollTimer = null;
+
+function showOptimizePanel() {
+    const panel = $('#optimize-panel');
+    if (panel) panel.classList.add('visible');
+}
+
+async function startOptimization() {
+    const btn = $('#btn-optimize');
+    const statusEl = $('#optimize-status');
+    const doneActions = $('#optimize-done-actions');
+    btn.disabled = true;
+    doneActions.style.display = 'none';
+    statusEl.style.display = 'block';
+    $('#opt-trial').textContent = '0 / ?';
+    $('#opt-best-score').innerHTML = '&mdash;';
+    $('#opt-track-type').innerHTML = '&mdash;';
+    $('#opt-status-text').innerHTML = `<div class="spinner" style="display:inline-block;vertical-align:middle"></div> ${t('opt_running')}`;
+    $('#opt-params-json').textContent = '{}';
+
+    const maxTrials = parseInt($('#opt-max-trials').value) || 40;
+
+    try {
+        const resp = await fetch('/api/optimize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ max_trials: maxTrials }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            toast(data.error || t('process_fail'), 'error');
+            btn.disabled = false;
+            return;
+        }
+        pollOptimizationStatus();
+    } catch (err) {
+        toast(t('process_fail') + ': ' + err.message, 'error');
+        btn.disabled = false;
+    }
+}
+
+function pollOptimizationStatus() {
+    if (optimizePollTimer) clearInterval(optimizePollTimer);
+    optimizePollTimer = setInterval(async () => {
+        try {
+            const resp = await fetch('/api/optimize/status');
+            const data = await resp.json();
+            updateOptimizeUI(data);
+            if (data.status === 'done' || data.status === 'error' || data.status === 'idle') {
+                clearInterval(optimizePollTimer);
+                optimizePollTimer = null;
+                $('#btn-optimize').disabled = false;
+            }
+        } catch (err) {
+            clearInterval(optimizePollTimer);
+            optimizePollTimer = null;
+            $('#btn-optimize').disabled = false;
+        }
+    }, 800);
+}
+
+function updateOptimizeUI(data) {
+    $('#opt-trial').textContent = `${data.current_trial || 0} / ${data.total_trials || '?'}`;
+    if (data.best_score != null) {
+        $('#opt-best-score').textContent = data.best_score.toFixed(4);
+    }
+    if (data.track_type) {
+        $('#opt-track-type').textContent = data.track_type.toUpperCase();
+    }
+    if (data.current_params && Object.keys(data.current_params).length > 0) {
+        $('#opt-params-json').textContent = JSON.stringify(data.current_params, null, 2);
+    }
+
+    if (data.status === 'done') {
+        const reason = data.stop_reason ? ` (${data.stop_reason})` : '';
+        $('#opt-status-text').innerHTML = `<span style="color:var(--success)">${t('opt_done')}${reason}</span>`;
+        $('#optimize-done-actions').style.display = 'flex';
+        if (data.best_params && Object.keys(data.best_params).length > 0) {
+            $('#opt-params-json').textContent = JSON.stringify(data.best_params, null, 2);
+        }
+    } else if (data.status === 'error') {
+        $('#opt-status-text').innerHTML = `<span style="color:var(--danger)">${t('opt_error')}: ${data.error || 'unknown'}</span>`;
+    } else {
+        $('#opt-status-text').innerHTML = `<div class="spinner" style="display:inline-block;vertical-align:middle"></div> ${t('opt_running')}`;
+    }
+}
+
+async function applyOptimized() {
+    try {
+        const resp = await fetch('/api/optimize/apply', { method: 'POST' });
+        const data = await resp.json();
+        if (!resp.ok) { toast(data.error || t('process_fail'), 'error'); return; }
+
+        state.processed = true;
+        state.notationCache = {};
+        state.playbackCache = {};
+        state.fullPlayerData = null;
+        $('#btn-download').style.display = 'inline-flex';
+        $('#player-src-processed').disabled = false;
+
+        if (state.fileInfo && data.tracks) {
+            state.fileInfo.tracks.forEach((orig, i) => {
+                const pt = data.tracks[i];
+                if (pt) {
+                    orig.note_count = pt.note_count;
+                    orig.channels_used = pt.channels_used;
+                    orig.note_range = pt.note_range;
+                }
+            });
+        }
+        showTracks(state.fileInfo.tracks);
+        $$('.comparison-tabs').forEach(el => el.style.display = 'flex');
+        toast(t('opt_applied'), 'success');
+    } catch (err) {
+        toast(t('process_fail') + ': ' + err.message, 'error');
+    }
+}
 
 // ─────────────────────────────────────────────
 //  Audio Cleanup Helper
@@ -760,6 +896,8 @@ document.addEventListener('DOMContentLoaded', () => {
     $('#lang-toggle').addEventListener('click', toggleLanguage);
     $('#btn-process').addEventListener('click', processFile);
     $('#btn-download').addEventListener('click', downloadFile);
+    $('#btn-optimize').addEventListener('click', startOptimization);
+    $('#btn-apply-optimized').addEventListener('click', applyOptimized);
 
     // Full player controls
     $('#player-play').addEventListener('click', resumeOrStartFullPlayer);

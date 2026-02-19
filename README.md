@@ -20,6 +20,7 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 - **Tone.js Playback** — play individual tracks or the full MIDI in the browser with transport controls (play, pause, stop, rewind, seek)
 - **Comparison** — switch between original and processed versions for notation and playback
 - **Russian / English UI** — language toggle in the top-right corner
+- **Auto Optimize** — Optuna-based parameter search that automatically finds the best cleaning settings for a given MIDI file; detects track type and adjusts search ranges accordingly
 - **Tolerant Parsing** — handles invalid MIDI meta events (e.g. corrupt key signatures from AI tools) gracefully
 
 ## Processing Parameters
@@ -49,6 +50,33 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 | **Merge Tracks: Include CC** | toggle | off | Include CC events in the merged output. When off, all CC messages are stripped during merge. |
 | **Merge Tracks: CC Whitelist** | list | 64, 68 | When Include CC is on, only these CC numbers are kept. Empty list = keep all CC. |
 
+### Auto Optimize
+
+The Auto Optimize panel (visible after uploading a MIDI file) uses [Optuna](https://optuna.org/) to search for the best combination of cleaning parameters. It automatically detects the dominant track type (guitar, vocal, bass, etc.) and adjusts the search ranges accordingly.
+
+**Search space:**
+
+| Parameter | Range |
+|-----------|-------|
+| min_duration | 40–240 (adjusted by track type) |
+| min_velocity | 0–40 (adjusted by track type) |
+| cluster_window | 10–120 (adjusted by track type) |
+| cluster_pitch | 0–2 |
+| triplet_tolerance | 0.05–0.30 |
+| quantize | true / false |
+| remove_triplets | true / false |
+| merge_voices | true / false |
+
+**Scoring function:**
+
+```
+score = unique_pitches * 2 + avg_duration - short_note_ratio * 5 - overlap_count * 3 - voice_count * 4
+```
+
+**Early stopping:** optimization stops when improvement is < 0.5% for 4 consecutive iterations, or score declines > 1% for 2 consecutive iterations, or after the configured maximum trials (default 40).
+
+**API:** `POST /api/optimize` starts the optimization in a background thread; `GET /api/optimize/status` returns live progress (current trial, best score, parameters); `POST /api/optimize/apply` applies the best result as the processed file.
+
 ### Per-Track Overrides
 
 Each track card has its own **Min Duration** and **Min Velocity** sliders that override the global noise filter settings for that specific track. Tracks can also be individually disabled via checkboxes.
@@ -72,6 +100,7 @@ Each track card has its own **Min Duration** and **Min Velocity** sliders that o
 - Python 3.10+
 - Flask 3.0+
 - mido 1.3+
+- optuna 3.5+
 
 External (loaded from CDN in the browser):
 - [VexFlow 4.2.5](https://www.vexflow.com/) — music notation rendering
@@ -92,11 +121,14 @@ The app will be available at `http://localhost:5000`.
 ## Running Tests
 
 ```bash
-# Run all tests (including E2E)
+# Run all tests (including E2E and optimizer tests)
 python -m pytest tests/ -v
 
 # Run only the end-to-end test
 python -m pytest tests/test_e2e_process.py -v
+
+# Run only the auto-tuner tests
+python -m pytest tests/test_auto_tuner.py -v
 ```
 
 The E2E test uploads the test asset MIDI (`tests/assets/The Dragon and The Princess (FX).mid`),
@@ -106,7 +138,13 @@ processes it with recommended settings, and saves the result to:
 tests/output/The Dragon and The Princess (FX)_processed_by_tests.mid
 ```
 
-No external services or GUI required — the test uses Flask's built-in test client.
+The auto-tuner test runs Optuna optimization on the same MIDI and saves the best result to:
+
+```
+tests/output/optimized.mid
+```
+
+No external services or GUI required — all tests use Flask's built-in test client.
 
 ## Deployment
 
@@ -165,6 +203,8 @@ Configuration variables in `Makefile`:
 │   ├── noise_filter.py               # Short/quiet note removal
 │   ├── same_pitch_overlap_resolver.py # Same-pitch overlap deduplication
 │   └── merge_tracks_to_single.py     # Multi-track → single-track flattener
+├── optimizers/
+│   └── auto_tuner.py       # Optuna-based parameter optimization
 ├── utils/
 │   ├── midi_helpers.py     # MIDI utility functions
 │   ├── midi_analyzer.py    # Notation and playback data generation
