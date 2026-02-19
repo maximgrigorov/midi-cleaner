@@ -21,7 +21,15 @@ Upload a MIDI file exported from Guitar Pro or similar DAW, configure cleaning p
 - **Comparison** — switch between original and processed versions for notation and playback
 - **Russian / English UI** — language toggle in the top-right corner
 - **Auto Optimize** — Optuna-based parameter search that automatically finds the best cleaning settings for a given MIDI file; detects track type and adjusts search ranges accordingly
+- **Processor Telemetry** — per-step metrics (notes in/out, duration, removals) visible in a collapsible Processing Log panel; download full report as JSON
+- **Presets** — built-in profiles for FX, Strings, Vocals, Guitar, Bass, Drums (Preserve/Cleaner variants); auto-suggested based on detected track type
+- **LLM Guidance** — optional GPT-4o-mini strategy advisor that suggests parameter adjustments when the optimizer stalls (off by default, requires LiteLLM endpoint)
+- **Documentation** — multi-page musician-friendly docs accessible from the "?" button in the header
 - **Tolerant Parsing** — handles invalid MIDI meta events (e.g. corrupt key signatures from AI tools) gracefully
+
+## Documentation
+
+See the [User Documentation](docs/README.md) for musician-friendly guides, step-by-step recipes for each instrument type, and a glossary of terms. Also accessible from the "?" button in the app header.
 
 ## Processing Parameters
 
@@ -101,6 +109,7 @@ Each track card has its own **Min Duration** and **Min Velocity** sliders that o
 - Flask 3.0+
 - mido 1.3+
 - optuna 3.5+
+- openai 1.0+ (optional, for LLM guidance)
 
 External (loaded from CDN in the browser):
 - [VexFlow 4.2.5](https://www.vexflow.com/) — music notation rendering
@@ -121,30 +130,19 @@ The app will be available at `http://localhost:5000`.
 ## Running Tests
 
 ```bash
-# Run all tests (including E2E and optimizer tests)
+# Run all tests
 python -m pytest tests/ -v
 
-# Run only the end-to-end test
-python -m pytest tests/test_e2e_process.py -v
-
-# Run only the auto-tuner tests
-python -m pytest tests/test_auto_tuner.py -v
+# Run specific test suites
+python -m pytest tests/test_e2e_process.py -v       # End-to-end
+python -m pytest tests/test_auto_tuner.py -v         # Optimizer
+python -m pytest tests/test_telemetry.py -v          # Telemetry
+python -m pytest tests/test_presets.py -v             # Presets
+python -m pytest tests/test_llm_guidance.py -v        # LLM (mocked)
+python -m pytest tests/test_optimizer_telemetry.py -v # Optimizer + telemetry
 ```
 
-The E2E test uploads the test asset MIDI (`tests/assets/The Dragon and The Princess (FX).mid`),
-processes it with recommended settings, and saves the result to:
-
-```
-tests/output/The Dragon and The Princess (FX)_processed_by_tests.mid
-```
-
-The auto-tuner test runs Optuna optimization on the same MIDI and saves the best result to:
-
-```
-tests/output/optimized.mid
-```
-
-No external services or GUI required — all tests use Flask's built-in test client.
+Test artifacts are saved to `tests/output/` (git-ignored). No external services or GUI required — all tests use Flask's built-in test client. LLM tests use mocks (no network).
 
 ## Deployment
 
@@ -203,8 +201,15 @@ Configuration variables in `Makefile`:
 │   ├── noise_filter.py               # Short/quiet note removal
 │   ├── same_pitch_overlap_resolver.py # Same-pitch overlap deduplication
 │   └── merge_tracks_to_single.py     # Multi-track → single-track flattener
+├── telemetry.py            # ProcessorTelemetry, PipelineReport, PipelineContext
 ├── optimizers/
 │   └── auto_tuner.py       # Optuna-based parameter optimization
+├── presets/
+│   └── presets.py          # Built-in cleaning presets by instrument type
+├── llm/
+│   └── guidance.py         # Optional LLM advisor (GPT-4o-mini via LiteLLM)
+├── prompts/
+│   └── llm_strategy_prompt.txt  # System prompt for LLM advisor
 ├── utils/
 │   ├── midi_helpers.py     # MIDI utility functions
 │   ├── midi_analyzer.py    # Notation and playback data generation
@@ -214,9 +219,19 @@ Configuration variables in `Makefile`:
 ├── static/
 │   ├── css/style.css
 │   └── js/app.js           # Frontend logic (upload, playback, notation, i18n)
+├── docs/                   # Multi-page user documentation (musician-friendly)
+│   ├── 01_quick_start.md
+│   ├── 02_workflow_by_track_type.md
+│   ├── 03_understanding_controls.md
+│   ├── 04_troubleshooting.md
+│   └── 05_glossary.md
 └── tests/
     ├── assets/              # Test MIDI files
     ├── output/              # Processed MIDI artifacts (git-ignored)
     ├── test_e2e_process.py  # End-to-end upload/process/download test
+    ├── test_telemetry.py    # Telemetry model + pipeline integration tests
+    ├── test_presets.py      # Preset module tests
+    ├── test_llm_guidance.py # LLM advisor tests (mocked)
+    ├── test_optimizer_telemetry.py # Optimizer + telemetry tests
     └── ...                  # Unit tests for individual processors
 ```

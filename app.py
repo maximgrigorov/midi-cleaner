@@ -28,7 +28,9 @@ _mido_meta.MetaSpec_key_signature.decode = _lenient_ks_decode
 
 from config import DEFAULT_CONFIG
 from processors.pipeline import ProcessingPipeline
+from telemetry import PipelineContext
 from optimizers.auto_tuner import AutoTuner, score_midi
+from presets.presets import list_presets, get_preset_config, apply_preset, suggest_preset
 from utils.track_detector import get_track_info, suggest_thresholds
 from utils.midi_analyzer import (
     analyze_track_for_notation,
@@ -42,6 +44,10 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# In-memory report storage keyed by session_id
+_reports: dict[str, dict] = {}
+_reports_lock = threading.Lock()
 
 
 def _get_session_dir():
@@ -72,6 +78,27 @@ def _load_midi(source='original'):
 @app.route('/')
 def index():
     return render_template('index.html')
+
+
+@app.route('/docs/')
+@app.route('/docs/<path:filename>')
+def serve_docs(filename='README.md'):
+    """Serve documentation markdown files."""
+    docs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs')
+    filepath = os.path.join(docs_dir, filename)
+    if not os.path.exists(filepath) or not filepath.startswith(docs_dir):
+        return 'Not found', 404
+    with open(filepath) as f:
+        content = f.read()
+    html = f'''<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <title>MIDI Cleaner Docs</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <style>body{{max-width:800px;margin:40px auto;padding:0 20px;font-family:system-ui;line-height:1.6}}
+    pre{{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}}
+    h1,h2,h3{{color:#333}}a{{color:#007bff}}</style>
+    </head><body><nav><a href="/docs/">Index</a> | <a href="/">Back to App</a></nav>
+    <pre style="white-space:pre-wrap">{content}</pre></body></html>'''
+    return html
 
 
 @app.route('/api/upload', methods=['POST'])
@@ -141,16 +168,30 @@ def process_midi():
             else:
                 full_config[key] = value
 
+    preset_name = config.pop('_preset', '')
+
     try:
         mid = mido.MidiFile(original_path)
-        pipeline = ProcessingPipeline(full_config)
+        original_name = session.get('original_name', '')
+
+        ctx = PipelineContext(file_name=original_name, config=full_config)
+        if preset_name:
+            ctx.report.preset_applied = preset_name
+
+        pipeline = ProcessingPipeline(full_config, context=ctx)
         processed = pipeline.process(mid)
+
+        report = ctx.report
 
         session_dir = _get_session_dir()
         file_id = session.get('file_id', 'unknown')
         processed_path = os.path.join(session_dir, f'{file_id}_processed.mid')
         processed.save(processed_path)
         session['processed_path'] = processed_path
+
+        sid = session.get('session_id', '')
+        with _reports_lock:
+            _reports[sid] = report.to_dict()
 
         tracks_info = []
         for idx, track in enumerate(processed.tracks):
@@ -162,6 +203,7 @@ def process_midi():
             'success': True,
             'file_id': file_id,
             'tracks': tracks_info,
+            'report': report.to_dict(),
         })
     except Exception as e:
         traceback.print_exc()
@@ -186,6 +228,64 @@ def download_midi():
         download_name=download_name,
         mimetype='audio/midi',
     )
+
+
+@app.route('/api/report')
+def get_report():
+    """Return the telemetry report for the last processing run."""
+    sid = session.get('session_id', '')
+    with _reports_lock:
+        report = _reports.get(sid)
+    if not report:
+        return jsonify({'error': 'No report available. Process a file first.'}), 404
+    return jsonify(report)
+
+
+@app.route('/api/report/download')
+def download_report():
+    """Download the telemetry report as report.json."""
+    sid = session.get('session_id', '')
+    with _reports_lock:
+        report = _reports.get(sid)
+    if not report:
+        return jsonify({'error': 'No report available'}), 404
+    import io
+    buf = io.BytesIO(json.dumps(report, indent=2).encode('utf-8'))
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name='report.json',
+                     mimetype='application/json')
+
+
+@app.route('/api/presets')
+def api_presets():
+    """List available presets."""
+    return jsonify({'presets': list_presets()})
+
+
+@app.route('/api/presets/<preset_id>')
+def api_preset_config(preset_id):
+    """Return config overrides for a specific preset."""
+    cfg = get_preset_config(preset_id)
+    if not cfg:
+        return jsonify({'error': 'Preset not found'}), 404
+    return jsonify({'config': cfg})
+
+
+@app.route('/api/presets/suggest')
+def api_suggest_preset():
+    """Suggest a preset based on detected track type."""
+    mid, err = _load_midi('original')
+    if err:
+        return err
+    from optimizers.auto_tuner import detect_dominant_track_type
+    track_type = detect_dominant_track_type(mid)
+    preset_id = suggest_preset(track_type)
+    cfg = get_preset_config(preset_id) if preset_id else {}
+    return jsonify({
+        'track_type': track_type,
+        'preset_id': preset_id or '',
+        'config': cfg,
+    })
 
 
 @app.route('/api/track/<int:track_idx>/notation')
@@ -285,7 +385,8 @@ _optimize_state: dict[str, dict] = {}
 _optimize_lock = threading.Lock()
 
 
-def _run_optimization(session_id: str, midi_path: str, max_trials: int):
+def _run_optimization(session_id: str, midi_path: str, max_trials: int,
+                      llm_config: dict | None = None):
     """Background worker for optimization."""
     try:
         mid = mido.MidiFile(midi_path)
@@ -304,7 +405,22 @@ def _run_optimization(session_id: str, midi_path: str, max_trials: int):
                         'metrics': tr.metrics,
                     })
 
-        tuner = AutoTuner(mid, max_trials=max_trials, callback=on_trial)
+        llm_advisor = None
+        if llm_config and llm_config.get('enabled'):
+            try:
+                from llm.guidance import LLMAdvisor
+                llm_advisor = LLMAdvisor(
+                    api_base=llm_config.get('api_base', 'http://alma:4000'),
+                    model=llm_config.get('model', 'gpt-4o-mini'),
+                    max_calls=llm_config.get('max_calls', 3),
+                    max_tokens=llm_config.get('max_tokens', 600),
+                    enabled=True,
+                )
+            except Exception:
+                pass
+
+        tuner = AutoTuner(mid, max_trials=max_trials, callback=on_trial,
+                          llm_advisor=llm_advisor)
 
         with _optimize_lock:
             st = _optimize_state.get(session_id)
@@ -313,14 +429,22 @@ def _run_optimization(session_id: str, midi_path: str, max_trials: int):
 
         result = tuner.optimize()
 
-        # Apply the best config and save processed file
-        pipeline = ProcessingPipeline(result.best_config)
+        ctx = PipelineContext(config=result.best_config)
+        pipeline = ProcessingPipeline(result.best_config, context=ctx)
         processed = pipeline.process(mid)
 
         session_dir = os.path.join(UPLOAD_DIR, session_id)
         os.makedirs(session_dir, exist_ok=True)
         optimized_path = os.path.join(session_dir, 'optimized.mid')
         processed.save(optimized_path)
+
+        report = ctx.report
+        report.best_params = result.best_params
+        report.optimizer_history = [
+            {'number': t.number, 'score': t.score, 'params': t.params}
+            for t in result.trials
+        ]
+        report.llm_decisions = result.llm_decisions
 
         with _optimize_lock:
             st = _optimize_state.get(session_id)
@@ -332,6 +456,10 @@ def _run_optimization(session_id: str, midi_path: str, max_trials: int):
                 st['stop_reason'] = result.stop_reason
                 st['optimized_path'] = optimized_path
                 st['total_trials'] = len(result.trials)
+                st['llm_decisions'] = result.llm_decisions
+
+        with _reports_lock:
+            _reports[session_id] = report.to_dict()
 
     except Exception as e:
         traceback.print_exc()
@@ -358,6 +486,7 @@ def start_optimization():
     except json.JSONDecodeError:
         body = {}
     max_trials = min(int(body.get('max_trials', 40)), 100)
+    llm_cfg = body.get('llm', DEFAULT_CONFIG.get('llm', {}))
 
     with _optimize_lock:
         existing = _optimize_state.get(sid)
@@ -377,11 +506,12 @@ def start_optimization():
             'stop_reason': '',
             'error': None,
             'optimized_path': None,
+            'llm_decisions': [],
         }
 
     t = threading.Thread(
         target=_run_optimization,
-        args=(sid, original_path, max_trials),
+        args=(sid, original_path, max_trials, llm_cfg),
         daemon=True,
     )
     t.start()
@@ -416,6 +546,8 @@ def optimization_status():
         resp['error'] = st['error']
     if st.get('best_config'):
         resp['best_config'] = st['best_config']
+    if st.get('llm_decisions'):
+        resp['llm_decisions'] = st['llm_decisions']
 
     return jsonify(resp)
 

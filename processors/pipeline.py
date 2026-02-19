@@ -16,6 +16,7 @@ Post-processing (file-level):
 """
 
 import copy
+import time
 from collections import defaultdict
 
 import mido
@@ -29,6 +30,7 @@ from processors.cc_filter import CCFilter
 from processors.noise_filter import NoiseFilter
 from processors.same_pitch_overlap_resolver import SamePitchOverlapResolver
 from processors.merge_tracks_to_single import MergeTracksToSingleTrack
+from telemetry import PipelineContext, count_notes, count_notes_midi
 from utils.midi_helpers import (
     get_time_signature, calculate_bar_ticks,
     extract_note_pairs, extract_non_note_messages, rebuild_track_from_pairs,
@@ -39,13 +41,12 @@ from utils.track_detector import get_track_info
 class ProcessingPipeline:
     """Main MIDI processing pipeline."""
 
-    # Meta event types that should ONLY exist in the conductor track (Track 0).
-    # Having these in data tracks causes Guitar Pro to add spurious tempo markings.
     CONDUCTOR_ONLY_META = {'set_tempo', 'time_signature'}
 
-    def __init__(self, config):
+    def __init__(self, config, context: PipelineContext | None = None):
         self.config = config
         self.start_bar = config.get('start_bar', 1)
+        self.ctx = context or PipelineContext(config=config)
 
     def process(self, midi_file):
         """Process an entire MIDI file.
@@ -56,12 +57,21 @@ class ProcessingPipeline:
         Returns:
             mido.MidiFile — processed copy (original untouched)
         """
+        pipeline_start = time.time()
         tpb = midi_file.ticks_per_beat
 
-        # Create output file preserving format
+        self.ctx.report.input_metrics = {
+            'total_notes': count_notes_midi(midi_file),
+            'tracks': len(midi_file.tracks),
+            'ticks_per_beat': tpb,
+        }
+        self.ctx.report.track_names = [
+            get_track_info(t, i, tpb)['name']
+            for i, t in enumerate(midi_file.tracks)
+        ]
+
         output = mido.MidiFile(type=midi_file.type, ticks_per_beat=tpb)
 
-        # Get time signature from first track (tempo track)
         time_sig = (4, 4)
         if midi_file.tracks:
             time_sig = get_time_signature(midi_file.tracks[0])
@@ -72,31 +82,42 @@ class ProcessingPipeline:
 
         for track_idx, track in enumerate(midi_file.tracks):
             track_info = get_track_info(track, track_idx, tpb)
-
-            # Tempo deduplication runs on ALL tracks (conductor Track 0 included)
             deduped = tempo_dedup.process(copy.deepcopy(track), tpb)
 
-            # Tracks without notes (tempo track, etc.) — keep after dedup
             if not track_info['has_notes']:
                 output.tracks.append(deduped)
                 continue
 
-            # Get per-track config overrides
             track_config = self._get_track_config(track_idx, track_info)
-
-            # Process the track
             processed = self._process_track(
                 deduped, tpb, track_config, processing_start_tick, time_sig
             )
-
-            # Clean up: remove conductor-only meta events from data tracks
-            # In Type 1 MIDI, tempo/time-sig events belong only in Track 0
             processed = self._strip_conductor_meta(processed)
-
             output.tracks.append(processed)
 
-        # File-level: optionally flatten all tracks into a single MTrk
+        # Telemetry for tempo dedup (aggregate across all tracks)
+        input_tempo = sum(1 for t in midi_file.tracks for m in t if m.type == 'set_tempo')
+        output_tempo = sum(1 for t in output.tracks for m in t if m.type == 'set_tempo')
+        step = self.ctx.begin_step('TempoDeduplicator',
+                                   self.config.get('tempo_deduplicator', {}).get('enabled', True),
+                                   count_notes_midi(midi_file))
+        step.tempo_events_removed = max(0, input_tempo - output_tempo)
+        self.ctx.end_step(count_notes_midi(output))
+
+        # File-level merge
+        pre_merge_notes = count_notes_midi(output)
+        merge_step = self.ctx.begin_step('MergeTracksToSingleTrack',
+                                         self.config.get('merge_tracks', {}).get('enabled', False),
+                                         pre_merge_notes)
         output = MergeTracksToSingleTrack(self.config).process(output)
+        merge_step.tracks_merged = len(output.tracks) == 1
+        self.ctx.end_step(count_notes_midi(output))
+
+        self.ctx.report.output_metrics = {
+            'total_notes': count_notes_midi(output),
+            'tracks': len(output.tracks),
+        }
+        self.ctx.finalize(pipeline_start)
 
         return output
 
@@ -114,41 +135,37 @@ class ProcessingPipeline:
             return self._apply_processors(track, tpb, config, time_sig)
 
     def _apply_processors(self, track, tpb, config, time_sig=(4, 4)):
-        """Apply all processing steps in order."""
+        """Apply all processing steps in order, with telemetry."""
         result = track
 
-        # 0. Pitch Cluster — collapse near-pitch simultaneous notes before any merging
-        pitch_cluster = PitchClusterProcessor(config)
-        result = pitch_cluster.process(result, tpb)
+        steps = [
+            ('PitchCluster', lambda r: PitchClusterProcessor(config).process(r, tpb),
+             config.get('pitch_cluster', {}).get('enabled', True)),
+            ('VoiceMerger', lambda r: VoiceMerger(config).process(r, tpb),
+             config.get('merge_voices', True)),
+            ('CCFilter', lambda r: CCFilter(config).process(r, tpb),
+             config.get('remove_cc', True)),
+            ('TripletRemover', lambda r: TripletRemover(config).process(r, tpb),
+             config.get('remove_triplets', True)),
+            ('Quantizer', lambda r: Quantizer(config).process(r, tpb, time_sig=time_sig),
+             config.get('quantize', True)),
+            ('NoiseFilter', lambda r: NoiseFilter(config).process(r, tpb),
+             config.get('filter_noise', True)),
+            ('SamePitchOverlapResolver', lambda r: SamePitchOverlapResolver(config).process(r, tpb),
+             config.get('same_pitch_overlap_resolver', {}).get('enabled', True)),
+        ]
 
-        # 1. Voice Merger
-        merger = VoiceMerger(config)
-        result = merger.process(result, tpb)
+        for name, fn, enabled in steps:
+            nc_before = count_notes(result)
+            self.ctx.begin_step(name, enabled, nc_before)
+            result = fn(result)
+            self.ctx.end_step(count_notes(result))
 
-        # 2. CC Filter
-        cc_filter = CCFilter(config)
-        result = cc_filter.process(result, tpb)
-
-        # 3. Triplet Remover
-        triplet = TripletRemover(config)
-        result = triplet.process(result, tpb)
-
-        # 4. Quantizer (bar-aware)
-        quantizer = Quantizer(config)
-        result = quantizer.process(result, tpb, time_sig=time_sig)
-
-        # 5. Noise Filter
-        noise = NoiseFilter(config)
-        result = noise.process(result, tpb)
-
-        # 6. Same-Pitch Overlap Resolver
-        overlap = SamePitchOverlapResolver(config)
-        result = overlap.process(result, tpb)
-
-        # 7. Final chord alignment — ensure simultaneous notes have same duration
-        #    (previous processors may have re-introduced mismatches)
         if config.get('merge_voices', True):
+            nc = count_notes(result)
+            self.ctx.begin_step('FinalChordAlignment', True, nc)
             result = self._final_chord_alignment(result)
+            self.ctx.end_step(count_notes(result))
 
         return result
 

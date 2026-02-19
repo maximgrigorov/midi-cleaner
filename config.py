@@ -47,6 +47,15 @@ DEFAULT_CONFIG = {
 
     # Per-track overrides: { track_index: { param: value, ... } }
     'track_overrides': {},
+
+    # LLM guidance (optional)
+    'llm': {
+        'enabled': False,
+        'api_base': 'http://alma:4000',
+        'model': 'gpt-4o-mini',
+        'max_calls': 3,
+        'max_tokens': 600,
+    },
 }
 
 # Quantization grid divisors (relative to ticks_per_beat = 1 quarter note)

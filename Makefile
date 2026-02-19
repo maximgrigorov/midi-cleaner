@@ -66,15 +66,6 @@ deploy:
 			-e SECRET_KEY=\"$$(python3 -c 'import secrets; print(secrets.token_hex(32))')\" \
 			$(IMAGE_NAME)"
 
-	@echo "==> Configuring firewall and systemd..."
-	$(SSH) "\
-		sudo firewall-cmd --permanent --add-port=$(REMOTE_PORT)/tcp && \
-		sudo firewall-cmd --reload && \
-		cd /etc/systemd/system && \
-		sudo podman generate systemd --name $(CONTAINER_NAME) --new | sudo tee $(CONTAINER_NAME).service > /dev/null && \
-		sudo systemctl daemon-reload && \
-		sudo systemctl enable $(CONTAINER_NAME).service"
-
 	@echo ""
 	@echo "✓ Deployed! MIDI Cleaner running at http://$(DEPLOY_HOST):$(REMOTE_PORT)"
 	@echo "  Container auto-starts on server reboot via systemd."

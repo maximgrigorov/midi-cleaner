@@ -29,11 +29,15 @@ import optuna
 
 from config import DEFAULT_CONFIG
 from processors.pipeline import ProcessingPipeline
+from telemetry import PipelineContext
 from utils.midi_helpers import extract_note_pairs
 from utils.track_detector import get_track_info
 
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 logger = logging.getLogger(__name__)
+
+# Stagnation threshold for triggering LLM call
+_LLM_STALL_ROUNDS = 2
 
 # ── Track-type-aware default parameter ranges ────────────────────────────
 
@@ -88,6 +92,7 @@ class OptimizationResult:
     best_config: dict[str, Any]
     trials: list[TrialResult] = field(default_factory=list)
     stop_reason: str = ''
+    llm_decisions: list[dict[str, Any]] = field(default_factory=list)
 
 
 # ── Scoring ──────────────────────────────────────────────────────────────
@@ -251,7 +256,8 @@ class AutoTuner:
 
     def __init__(self, midi_file: mido.MidiFile, *,
                  max_trials: int = 40,
-                 callback: Callable[[TrialResult], None] | None = None):
+                 callback: Callable[[TrialResult], None] | None = None,
+                 llm_advisor=None):
         self.midi_file = midi_file
         self.max_trials = max_trials
         self._callback = callback
@@ -259,6 +265,9 @@ class AutoTuner:
         self._type_hints = TRACK_TYPE_DEFAULTS.get(
             self._track_type, TRACK_TYPE_DEFAULTS['other'])
         self._trials: list[TrialResult] = []
+        self._llm = llm_advisor
+        self._llm_override: dict[str, Any] | None = None
+        self._metrics_before: dict[str, float] = {}
 
     @property
     def track_type(self) -> str:
@@ -266,6 +275,8 @@ class AutoTuner:
 
     def optimize(self) -> OptimizationResult:
         """Run the full Optuna optimization loop. Returns OptimizationResult."""
+        _, self._metrics_before = score_midi(self.midi_file)
+
         early_stop = _EarlyStopCallback()
 
         study = optuna.create_study(direction='maximize',
@@ -284,19 +295,25 @@ class AutoTuner:
 
         reason = early_stop.stop_reason or f'max trials ({self.max_trials})'
 
-        return OptimizationResult(
+        result = OptimizationResult(
             best_params=best_params,
             best_score=round(best.value, 4),
             best_config=best_config,
             trials=self._trials,
             stop_reason=reason,
         )
+        if self._llm and hasattr(self._llm, 'decisions'):
+            result.llm_decisions = list(self._llm.decisions)
+        return result
 
     def _objective(self, trial: optuna.Trial) -> float:
+        self._maybe_ask_llm(trial.number)
+
         params = self._suggest_params(trial)
         config = self._params_to_config(params)
 
-        pipeline = ProcessingPipeline(config)
+        ctx = PipelineContext(config=config)
+        pipeline = ProcessingPipeline(config, context=ctx)
         processed = pipeline.process(self.midi_file)
 
         score, metrics = score_midi(processed)
@@ -323,8 +340,66 @@ class AutoTuner:
 
         return score
 
+    def _maybe_ask_llm(self, trial_number: int) -> None:
+        """Ask LLM for guidance when optimizer stalls."""
+        if not self._llm or not self._llm.enabled or self._llm.calls_remaining <= 0:
+            return
+        if trial_number < _LLM_STALL_ROUNDS:
+            return
+
+        recent = self._trials[-_LLM_STALL_ROUNDS:]
+        if len(recent) < _LLM_STALL_ROUNDS:
+            return
+        scores = [t.score for t in recent]
+        base = scores[0]
+        if base != 0 and all(abs(s - base) / abs(base) * 100 < 0.5 for s in scores[1:]):
+            top_issues = self._identify_issues(recent[-1].metrics)
+            context = {
+                'track_type_guess': self._track_type,
+                'metrics_before': self._metrics_before,
+                'metrics_after': recent[-1].metrics,
+                'last_trial_params': recent[-1].params,
+                'last_trial_score': recent[-1].score,
+                'top_issues': top_issues,
+                'recent_trials': [
+                    {'params': t.params, 'score': t.score, 'metrics': t.metrics}
+                    for t in self._trials[-3:]
+                ],
+            }
+            suggestion = self._llm.suggest_params(context)
+            if suggestion:
+                self._llm_override = suggestion
+                logger.info('LLM suggested params: %s', suggestion)
+
+    @staticmethod
+    def _identify_issues(metrics: dict[str, float]) -> list[str]:
+        issues = []
+        if metrics.get('short_note_ratio', 0) > 0.1:
+            issues.append('short_note_ratio high')
+        if metrics.get('overlap_count', 0) > 5:
+            issues.append('overlaps high')
+        if metrics.get('voice_count', 0) > 2:
+            issues.append('polyphony high')
+        return issues
+
     def _suggest_params(self, trial: optuna.Trial) -> dict[str, Any]:
         h = self._type_hints
+
+        if self._llm_override:
+            override = self._llm_override
+            self._llm_override = None
+            return {
+                'min_duration': override.get('min_duration', 120),
+                'min_velocity': override.get('min_velocity', 10),
+                'cluster_window': override.get('cluster_window', 20),
+                'cluster_pitch': override.get('cluster_pitch', 1),
+                'triplet_tolerance': override.get('triplet_tolerance', 0.15),
+                'quantize': override.get('quantize', False),
+                'remove_triplets': override.get('remove_triplets', False),
+                'merge_voices': override.get('merge_voices', True),
+                'same_pitch_resolver': override.get('same_pitch_resolver', True),
+            }
+
         return {
             'min_duration': trial.suggest_int(
                 'min_duration', h['min_duration_low'], h['min_duration_high'], step=10),
@@ -338,6 +413,7 @@ class AutoTuner:
             'quantize': trial.suggest_categorical('quantize', [True, False]),
             'remove_triplets': trial.suggest_categorical('remove_triplets', [True, False]),
             'merge_voices': trial.suggest_categorical('merge_voices', [True, False]),
+            'same_pitch_resolver': trial.suggest_categorical('same_pitch_resolver', [True, False]),
         }
 
     @staticmethod
@@ -356,7 +432,9 @@ class AutoTuner:
         config['remove_triplets'] = params['remove_triplets']
         config['merge_voices'] = params['merge_voices']
         config['filter_noise'] = True
-        config['same_pitch_overlap_resolver'] = {'enabled': True}
+        config['same_pitch_overlap_resolver'] = {
+            'enabled': params.get('same_pitch_resolver', True),
+        }
         config['tempo_deduplicator'] = {'enabled': True}
         config['remove_overlaps'] = True
         config['remove_cc'] = True

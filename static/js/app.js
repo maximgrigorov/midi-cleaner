@@ -42,6 +42,15 @@ const I18N = {
         opt_current_params: 'Current Best Parameters', opt_apply: 'Apply Best Parameters',
         opt_done: 'Done', opt_stopped: 'Stopped', opt_error: 'Error',
         opt_applied: 'Optimized parameters applied! Click Download.',
+        preset_label: 'Preset', preset_auto: 'Auto (Recommended)',
+        lock_advanced: 'Show Advanced',
+        processing_log: 'Processing Log', log_total_time: 'Total Time:',
+        log_notes_in: 'Notes In:', log_notes_out: 'Notes Out:', log_preset: 'Preset:',
+        log_step: 'Step', log_enabled: 'On', log_duration: 'Time (ms)',
+        log_in: 'In', log_out: 'Out', log_removed: 'Removed', log_detail: 'Detail',
+        download_report: 'Download report.json',
+        llm_guidance: 'LLM Guidance', llm_guidance_desc: 'Use GPT-4o-mini as strategy advisor when optimizer stalls',
+        llm_suggestions: 'LLM Suggestions',
         loaded_msg: 'Loaded', processing_msg: 'Processing...', process_done: 'Processing complete! Click Download.',
         no_notes: 'No notes to play', upload_fail: 'Upload failed', process_fail: 'Processing failed',
         loading_notation: 'Loading notation...', no_notes_track: 'No notes in this track',
@@ -84,6 +93,15 @@ const I18N = {
         opt_current_params: 'Лучшие параметры', opt_apply: 'Применить лучшие параметры',
         opt_done: 'Готово', opt_stopped: 'Остановлено', opt_error: 'Ошибка',
         opt_applied: 'Оптимизированные параметры применены! Нажмите Скачать.',
+        preset_label: 'Пресет', preset_auto: 'Авто (рекомендуемый)',
+        lock_advanced: 'Показать расширенные',
+        processing_log: 'Лог обработки', log_total_time: 'Общее время:',
+        log_notes_in: 'Нот на входе:', log_notes_out: 'Нот на выходе:', log_preset: 'Пресет:',
+        log_step: 'Шаг', log_enabled: 'Вкл.', log_duration: 'Время (мс)',
+        log_in: 'Вход', log_out: 'Выход', log_removed: 'Удалено', log_detail: 'Детали',
+        download_report: 'Скачать report.json',
+        llm_guidance: 'LLM подсказки', llm_guidance_desc: 'Использовать GPT-4o-mini как советника при застое оптимизатора',
+        llm_suggestions: 'LLM подсказки',
         loaded_msg: 'Загружен', processing_msg: 'Обработка...', process_done: 'Готово! Нажмите Скачать.',
         no_notes: 'Нет нот для воспроизведения', upload_fail: 'Ошибка загрузки', process_fail: 'Ошибка обработки',
         loading_notation: 'Загрузка нотации...', no_notes_track: 'Нет нот в дорожке',
@@ -189,6 +207,7 @@ async function uploadFile(file) {
         showTracks(data.tracks);
         showActionBar();
         showPlayerSection();
+        suggestPreset();
         toast(`${t('loaded_msg')} ${data.filename}: ${data.num_tracks} ${t('tracks').toLowerCase()}`, 'success');
     } catch (err) {
         toast(t('upload_fail') + ': ' + err.message, 'error'); resetDropZone();
@@ -216,7 +235,9 @@ function showFileInfo(data) {
 function showConfig() { $('.config-panel').classList.add('visible'); }
 
 function readGlobalConfig() {
+    const presetEl = $('#cfg-preset');
     return {
+        _preset: presetEl ? presetEl.value : '',
         tempo_deduplicator: { enabled: $('#cfg-tempo-dedup').checked },
         merge_voices: $('#cfg-merge-voices').checked,
         remove_overlaps: $('#cfg-remove-overlaps').checked,
@@ -378,6 +399,8 @@ async function processFile() {
         }
         showTracks(state.fileInfo.tracks);
         $$('.comparison-tabs').forEach(el => el.style.display = 'flex');
+
+        if (data.report) showProcessingLog(data.report);
         toast(t('process_done'), 'success');
     } catch (err) {
         toast(t('process_fail') + ': ' + err.message, 'error');
@@ -418,7 +441,10 @@ async function startOptimization() {
         const resp = await fetch('/api/optimize', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ max_trials: maxTrials }),
+            body: JSON.stringify({
+                max_trials: maxTrials,
+                llm: { enabled: $('#cfg-llm-enabled') ? $('#cfg-llm-enabled').checked : false },
+            }),
         });
         const data = await resp.json();
         if (!resp.ok) {
@@ -477,6 +503,8 @@ function updateOptimizeUI(data) {
     } else {
         $('#opt-status-text').innerHTML = `<div class="spinner" style="display:inline-block;vertical-align:middle"></div> ${t('opt_running')}`;
     }
+
+    if (data.llm_decisions) updateLLMSuggestionsUI(data.llm_decisions);
 }
 
 async function applyOptimized() {
@@ -887,17 +915,161 @@ function sanitizeDuration(dur) {
 function escHtml(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
 
 // ─────────────────────────────────────────────
+//  Processing Log
+// ─────────────────────────────────────────────
+function showProcessingLog(report) {
+    const panel = $('#processing-log');
+    if (!panel || !report) return;
+    panel.style.display = '';
+
+    const el = id => document.getElementById(id);
+    el('log-total-time').textContent = report.total_duration_ms + ' ms';
+    el('log-notes-in').textContent = (report.input_metrics || {}).total_notes || '—';
+    el('log-notes-out').textContent = (report.output_metrics || {}).total_notes || '—';
+    el('log-preset').textContent = report.preset_applied || '—';
+
+    const tbody = panel.querySelector('#log-steps tbody');
+    tbody.innerHTML = '';
+    (report.steps || []).forEach(step => {
+        const tr = document.createElement('tr');
+        if (!step.enabled) tr.classList.add('disabled');
+        let detail = '';
+        if (step.tempo_events_removed) detail += `tempo-${step.tempo_events_removed} `;
+        if (step.overlaps_resolved) detail += `overlaps-${step.overlaps_resolved} `;
+        if (step.clusters_merged) detail += `clusters-${step.clusters_merged} `;
+        if (step.tracks_merged) detail += 'merged ';
+        if (step.warnings && step.warnings.length) detail += step.warnings.join('; ');
+        tr.innerHTML = `<td>${escHtml(step.name)}</td><td>${step.enabled ? '✓' : '—'}</td>` +
+            `<td>${step.duration_ms}</td><td>${step.input_note_count}</td>` +
+            `<td>${step.output_note_count}</td><td>${step.notes_removed}</td>` +
+            `<td>${escHtml(detail.trim())}</td>`;
+        tbody.appendChild(tr);
+    });
+}
+
+// ─────────────────────────────────────────────
+//  Presets
+// ─────────────────────────────────────────────
+async function loadPresets() {
+    try {
+        const resp = await fetch('/api/presets');
+        const data = await resp.json();
+        const sel = $('#cfg-preset');
+        if (!sel) return;
+        (data.presets || []).forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.label;
+            opt.dataset.desc = p.description;
+            sel.appendChild(opt);
+        });
+        sel.addEventListener('change', applySelectedPreset);
+    } catch (e) { /* presets not critical */ }
+}
+
+async function applySelectedPreset() {
+    const sel = $('#cfg-preset');
+    const descEl = $('#preset-desc');
+    if (!sel) return;
+    const id = sel.value;
+    const opt = sel.selectedOptions[0];
+    if (descEl) descEl.textContent = opt?.dataset?.desc || '';
+    if (!id) return;
+    try {
+        const resp = await fetch(`/api/presets/${id}`);
+        const data = await resp.json();
+        if (data.config) applyConfigToUI(data.config);
+    } catch (e) { /* ignore */ }
+}
+
+function applyConfigToUI(cfg) {
+    if (cfg.filter_noise !== undefined) $('#cfg-filter-noise').checked = cfg.filter_noise;
+    if (cfg.min_duration_ticks !== undefined) { $('#cfg-min-duration').value = cfg.min_duration_ticks; updateSliderDisplay('#cfg-min-duration'); }
+    if (cfg.min_velocity !== undefined) { $('#cfg-min-velocity').value = cfg.min_velocity; updateSliderDisplay('#cfg-min-velocity'); }
+    if (cfg.remove_triplets !== undefined) $('#cfg-remove-triplets').checked = cfg.remove_triplets;
+    if (cfg.quantize !== undefined) $('#cfg-quantize').checked = cfg.quantize;
+    if (cfg.merge_voices !== undefined) $('#cfg-merge-voices').checked = cfg.merge_voices;
+    if (cfg.remove_overlaps !== undefined) $('#cfg-remove-overlaps').checked = cfg.remove_overlaps;
+    if (cfg.remove_cc !== undefined) $('#cfg-remove-cc').checked = cfg.remove_cc;
+    if (cfg.pitch_cluster) {
+        if (cfg.pitch_cluster.enabled !== undefined) $('#cfg-pitch-cluster').checked = cfg.pitch_cluster.enabled;
+        if (cfg.pitch_cluster.time_window_ticks !== undefined) { $('#cfg-pitch-cluster-window').value = cfg.pitch_cluster.time_window_ticks; updateSliderDisplay('#cfg-pitch-cluster-window'); }
+        if (cfg.pitch_cluster.pitch_threshold !== undefined) { $('#cfg-pitch-cluster-threshold').value = cfg.pitch_cluster.pitch_threshold; updateSliderDisplay('#cfg-pitch-cluster-threshold'); }
+    }
+    if (cfg.same_pitch_overlap_resolver) {
+        if (cfg.same_pitch_overlap_resolver.enabled !== undefined) $('#cfg-same-pitch-overlap').checked = cfg.same_pitch_overlap_resolver.enabled;
+    }
+}
+
+function updateSliderDisplay(selector) {
+    const el = $(selector);
+    if (!el) return;
+    const disp = el.parentElement.querySelector('.value');
+    if (disp) disp.textContent = el.value;
+}
+
+async function suggestPreset() {
+    try {
+        const resp = await fetch('/api/presets/suggest');
+        const data = await resp.json();
+        if (data.preset_id) {
+            const sel = $('#cfg-preset');
+            if (sel) {
+                sel.value = data.preset_id;
+                applySelectedPreset();
+            }
+        }
+    } catch (e) { /* suggestion is best-effort */ }
+}
+
+// ─────────────────────────────────────────────
+//  Advanced Fields Lock
+// ─────────────────────────────────────────────
+function initAdvancedToggle() {
+    const cb = $('#cfg-lock-advanced');
+    if (!cb) return;
+    const grid = document.querySelector('.config-grid');
+    cb.addEventListener('change', () => {
+        if (cb.checked) grid.classList.add('show-advanced');
+        else grid.classList.remove('show-advanced');
+    });
+}
+
+// ─────────────────────────────────────────────
+//  LLM Suggestions UI
+// ─────────────────────────────────────────────
+function updateLLMSuggestionsUI(decisions) {
+    const panel = $('#llm-suggestions');
+    const list = $('#llm-suggestion-list');
+    if (!panel || !list || !decisions || !decisions.length) return;
+    panel.style.display = '';
+    list.innerHTML = '';
+    decisions.forEach(d => {
+        const li = document.createElement('li');
+        const ok = d.parsed_ok ? '✓' : '✗';
+        const changes = d.suggested_changes ? Object.entries(d.suggested_changes).map(([k,v]) => `${k}=${v}`).join(', ') : '—';
+        li.textContent = `Call #${d.call_number}: ${ok} ${changes}`;
+        list.appendChild(li);
+    });
+}
+
+// ─────────────────────────────────────────────
 //  Initialization
 // ─────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     initUpload();
     initSliders();
+    initAdvancedToggle();
+    loadPresets();
 
     $('#lang-toggle').addEventListener('click', toggleLanguage);
     $('#btn-process').addEventListener('click', processFile);
     $('#btn-download').addEventListener('click', downloadFile);
     $('#btn-optimize').addEventListener('click', startOptimization);
     $('#btn-apply-optimized').addEventListener('click', applyOptimized);
+
+    const reportBtn = $('#btn-download-report');
+    if (reportBtn) reportBtn.addEventListener('click', () => { window.location = '/api/report/download'; });
 
     // Full player controls
     $('#player-play').addEventListener('click', resumeOrStartFullPlayer);

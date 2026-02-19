@@ -15,7 +15,10 @@
         <h1><span>MIDI</span> <span data-i18n="title">Cleaner</span></h1>
         <div class="subtitle" data-i18n="subtitle">Clean multi-track MIDI files from AI transcription artifacts</div>
     </div>
-    <button id="lang-toggle" class="btn-lang" title="Switch language">RU</button>
+    <div style="display:flex;gap:8px;align-items:center">
+        <a href="/docs/" target="_blank" class="btn-help" title="Documentation">?</a>
+        <button id="lang-toggle" class="btn-lang" title="Switch language">RU</button>
+    </div>
 </header>
 
 <main>
@@ -57,6 +60,19 @@
     <!-- Global Configuration -->
     <section class="config-panel">
         <h2 data-i18n="processing_settings">Processing Settings</h2>
+        <div class="preset-bar">
+            <div class="preset-select-group">
+                <label for="cfg-preset" data-i18n="preset_label">Preset</label>
+                <select id="cfg-preset">
+                    <option value="" data-i18n-opt="preset_auto">Auto (Recommended)</option>
+                </select>
+                <span class="preset-desc" id="preset-desc"></span>
+            </div>
+            <label class="lock-toggle" for="cfg-lock-advanced">
+                <input type="checkbox" id="cfg-lock-advanced">
+                <span data-i18n="lock_advanced">Show Advanced</span>
+            </label>
+        </div>
         <div class="config-grid">
             <div class="config-item">
                 <label for="cfg-tempo-dedup">
@@ -79,14 +95,14 @@
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-remove-overlaps" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item">
+            <div class="config-item" data-advanced>
                 <label for="cfg-remove-triplets">
                     <span data-i18n="remove_triplets">Remove Triplets</span>
                     <span class="desc" data-i18n="remove_triplets_desc">Convert triplet notes to straight eighths</span>
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-remove-triplets" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item">
+            <div class="config-item" data-advanced>
                 <label>
                     <span data-i18n="triplet_tolerance">Triplet Tolerance</span>
                     <span class="desc" data-i18n="triplet_tolerance_desc">Detection sensitivity (0.05=strict, 0.25=loose)</span>
@@ -96,14 +112,14 @@
                     <span class="value">0.15</span>
                 </div>
             </div>
-            <div class="config-item">
+            <div class="config-item" data-advanced>
                 <label for="cfg-quantize">
                     <span data-i18n="quantize">Quantize</span>
                     <span class="desc" data-i18n="quantize_desc">Snap note timing to rhythmic grid</span>
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-quantize" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item">
+            <div class="config-item" data-advanced>
                 <label for="cfg-quantize-grid">
                     <span data-i18n="grid_resolution">Grid Resolution</span>
                     <span class="desc" data-i18n="grid_resolution_desc">Quantization grid size</span>
@@ -114,14 +130,14 @@
                     <option value="sixteenth" data-i18n-opt="sixteenth">Sixteenth note</option>
                 </select>
             </div>
-            <div class="config-item">
+            <div class="config-item" data-advanced>
                 <label for="cfg-remove-cc">
                     <span data-i18n="remove_cc">Remove CC Messages</span>
                     <span class="desc" data-i18n="remove_cc_desc">Strip control change messages</span>
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-remove-cc" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item">
+            <div class="config-item" data-advanced>
                 <label>
                     <span data-i18n="cc_to_remove">CC Numbers to Remove</span>
                     <span class="desc" data-i18n="cc_to_remove_desc">Select which CC to strip</span>
@@ -238,6 +254,17 @@
                     </label>
                     <input type="number" id="opt-max-trials" min="1" max="100" value="40">
                 </div>
+                <div class="config-item">
+                    <label for="cfg-llm-enabled">
+                        <span data-i18n="llm_guidance">LLM Guidance</span>
+                        <span class="desc" data-i18n="llm_guidance_desc">Use GPT-4o-mini as strategy advisor when optimizer stalls</span>
+                    </label>
+                    <label class="toggle"><input type="checkbox" id="cfg-llm-enabled"><span class="slider"></span></label>
+                </div>
+                <div id="llm-suggestions" class="llm-suggestions" style="display:none">
+                    <h4 data-i18n="llm_suggestions">LLM Suggestions</h4>
+                    <ul id="llm-suggestion-list"></ul>
+                </div>
                 <button id="btn-optimize" class="btn btn-primary" style="margin-top:8px">
                     &#9881; <span data-i18n="opt_start">Start Optimization</span>
                 </button>
@@ -275,6 +302,40 @@
                 </div>
             </div>
         </div>
+    </section>
+
+    <!-- Processing Log (telemetry) -->
+    <section class="processing-log" id="processing-log" style="display:none">
+        <details>
+            <summary data-i18n="processing_log">Processing Log</summary>
+            <div class="log-summary">
+                <span class="log-label" data-i18n="log_total_time">Total Time:</span>
+                <span id="log-total-time">—</span>
+                <span class="log-label" data-i18n="log_notes_in">Notes In:</span>
+                <span id="log-notes-in">—</span>
+                <span class="log-label" data-i18n="log_notes_out">Notes Out:</span>
+                <span id="log-notes-out">—</span>
+                <span class="log-label" data-i18n="log_preset">Preset:</span>
+                <span id="log-preset">—</span>
+            </div>
+            <table class="log-steps" id="log-steps">
+                <thead>
+                    <tr>
+                        <th data-i18n="log_step">Step</th>
+                        <th data-i18n="log_enabled">On</th>
+                        <th data-i18n="log_duration">Time (ms)</th>
+                        <th data-i18n="log_in">In</th>
+                        <th data-i18n="log_out">Out</th>
+                        <th data-i18n="log_removed">Removed</th>
+                        <th data-i18n="log_detail">Detail</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+            <div class="log-actions">
+                <button id="btn-download-report" class="btn btn-sm" data-i18n="download_report">Download report.json</button>
+            </div>
+        </details>
     </section>
 
     <!-- Tracks List -->
