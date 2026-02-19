@@ -591,6 +591,14 @@ def apply_optimized():
 
 
 if __name__ == '__main__':
+    import logging as _logging
+    _log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
+    _logging.basicConfig(
+        level=getattr(_logging, _log_level, _logging.INFO),
+        format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+    )
+    # Always show LLM traffic in logs
+    _logging.getLogger('llm.guidance').setLevel(_logging.DEBUG)
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV', 'development') == 'development'
     app.run(host='0.0.0.0', port=port, debug=debug)

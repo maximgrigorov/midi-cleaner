@@ -51,9 +51,9 @@ DEFAULT_CONFIG = {
     # LLM guidance (optional).
     # Inside a podman container, the host is reachable via host.containers.internal
     # (requires --add-host=host.containers.internal:host-gateway on podman run).
-    # When running outside a container (dev mode) use localhost or alma directly.
+    # When running outside a container (dev mode) you can override with LLM_API_BASE env var.
     'llm': {
-        'enabled': False,
+        'enabled': True,
         'api_base': 'http://host.containers.internal:4000',
         'model': 'gpt-4o-mini',
         'max_calls': 3,
