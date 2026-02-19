@@ -90,7 +90,7 @@ export default function LeftPanel({
           Tracks
         </div>
         <div className="px-2 pb-2 space-y-0.5 max-h-[160px] overflow-y-auto">
-          {uploadData.tracks.map((track: TrackInfo) => (
+          {uploadData.tracks.filter((t: TrackInfo) => t.has_notes).map((track: TrackInfo) => (
             <button
               key={track.index}
               type="button"

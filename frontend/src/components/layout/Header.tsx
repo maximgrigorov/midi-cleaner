@@ -14,6 +14,7 @@ interface HeaderProps {
   showAdvanced: boolean;
   onToggleAdvanced: (v: boolean) => void;
   onOptimize: () => void;
+  onReset: () => void;
   hasFile: boolean;
 }
 
@@ -26,6 +27,7 @@ export default function Header({
   showAdvanced,
   onToggleAdvanced,
   onOptimize,
+  onReset,
   hasFile,
 }: HeaderProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -35,7 +37,7 @@ export default function Header({
       <div className="flex items-center gap-2 min-w-[180px]">
         <Icons.Music size={20} className="text-primary" />
         <span className="text-sm font-semibold text-foreground tracking-tight">
-          MIDI Obfuscator
+          MIDI Cleaner
         </span>
       </div>
 
@@ -49,7 +51,7 @@ export default function Header({
           <option value="">Select a preset…</option>
           {presets.map((p) => (
             <option key={p.id} value={p.id}>
-              {p.name} — {p.description}
+              {p.label} — {p.description}
             </option>
           ))}
         </select>
@@ -93,6 +95,14 @@ export default function Header({
           <span className="text-xs text-muted-foreground">Advanced</span>
           <Toggle checked={showAdvanced} onChange={onToggleAdvanced} />
         </div>
+        <button
+          onClick={onReset}
+          className="flex items-center gap-1.5 px-2 h-8 text-xs text-muted-foreground hover:text-foreground transition border-l border-border pl-3"
+          title="Reset all settings"
+        >
+          <Icons.X size={14} />
+          Reset
+        </button>
         <a
           href="/docs/"
           target="_blank"

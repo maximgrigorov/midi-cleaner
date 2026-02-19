@@ -100,7 +100,7 @@ export default function OptimizePanel({
                       onChange={(e) =>
                         onLlmConfigChange('api_base', e.target.value)
                       }
-                      placeholder="http://alma:4000"
+                      placeholder="http://alma:4000 (litellm proxy)"
                       className="w-full h-7 text-xs font-mono bg-background border border-border rounded-md px-2 text-foreground outline-none"
                     />
                   </div>
@@ -115,6 +115,10 @@ export default function OptimizePanel({
                 </div>
               )}
             </div>
+            <p className="text-[10px] text-muted-foreground">
+              Auto-optimize searches for the best parameters automatically.
+              Preset settings are ignored — the optimizer explores its own parameter space.
+            </p>
             <button
               onClick={onStart}
               className="flex items-center gap-1.5 px-4 py-2 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition"

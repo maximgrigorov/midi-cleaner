@@ -50,7 +50,7 @@ export const DEFAULT_CONFIG: MidiConfig = {
   track_overrides: {},
   llm: {
     enabled: true,
-    api_base: 'http://host.containers.internal:4000',
+    api_base: 'http://alma:4000',
     model: 'gpt-4o-mini',
     max_calls: 3,
     max_tokens: 600,

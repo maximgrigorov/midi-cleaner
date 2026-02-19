@@ -13,6 +13,7 @@ services:
       - LLM_API_KEY=${LLM_API_KEY:-sk-placeholder}
     extra_hosts:
       - "host.containers.internal:host-gateway"
+      - "alma:host-gateway"
 
   frontend:
     build: ./frontend

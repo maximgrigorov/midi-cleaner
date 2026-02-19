@@ -37,7 +37,8 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const scheduledRef = useRef<OscillatorNode[]>([]);
   const animFrameRef = useRef<number>(0);
-  const startTimeRef = useRef(0);
+  const playStartWallRef = useRef(0);
+  const playStartOffsetRef = useRef(0);
 
   const loadPlayback = useCallback(async (src: 'original' | 'processed') => {
     setLoading(true);
@@ -65,6 +66,27 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
     }
   }, [hasProcessed, source]);
 
+  const getVisibleNotes = useCallback(
+    (trackFilter: number | null) => {
+      if (!playbackData) return [];
+      const tracks =
+        trackFilter !== null
+          ? playbackData.tracks.filter((t) => t.index === trackFilter)
+          : playbackData.tracks;
+
+      const allNotes: (PlaybackNote & { color: string })[] = [];
+      tracks.forEach((track) => {
+        const color =
+          TRACK_COLORS[
+            playbackData.tracks.indexOf(track) % TRACK_COLORS.length
+          ];
+        track.notes.forEach((n) => allNotes.push({ ...n, color }));
+      });
+      return allNotes;
+    },
+    [playbackData]
+  );
+
   const drawPianoRoll = useCallback(
     (time: number) => {
       const canvas = canvasRef.current;
@@ -83,37 +105,24 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
       ctx.fillStyle = 'hsl(0,0%,9%)';
       ctx.fillRect(0, 0, w, h);
 
-      const tracks =
-        selectedTrack !== null
-          ? playbackData.tracks.filter((t) => t.index === selectedTrack)
-          : playbackData.tracks;
+      const allNotes = getVisibleNotes(selectedTrack);
+      if (allNotes.length === 0) {
+        ctx.fillStyle = 'hsl(0,0%,40%)';
+        ctx.font = '12px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No notes to display', w / 2, h / 2);
+        return;
+      }
 
-      const allNotes: (PlaybackNote & { color: string })[] = [];
-      tracks.forEach((track) => {
-        const color =
-          TRACK_COLORS[
-            playbackData.tracks.indexOf(track) % TRACK_COLORS.length
-          ];
-        track.notes.forEach((n) => allNotes.push({ ...n, color }));
-      });
-
-      if (allNotes.length === 0) return;
-
-      const minPitch = Math.max(
-        0,
-        Math.min(...allNotes.map((n) => n.pitch)) - 2
-      );
-      const maxPitch = Math.min(
-        127,
-        Math.max(...allNotes.map((n) => n.pitch)) + 2
-      );
+      const minPitch = Math.max(0, Math.min(...allNotes.map((n) => n.pitch)) - 2);
+      const maxPitch = Math.min(127, Math.max(...allNotes.map((n) => n.pitch)) + 2);
       const pitchRange = maxPitch - minPitch || 1;
 
       const duration = playbackData.duration || 10;
-      const viewWindow = 10;
+      const viewWindow = Math.min(duration, 10);
       const viewStart = Math.max(0, time - viewWindow * 0.3);
 
-      // Grid lines
+      // Grid
       ctx.strokeStyle = 'hsl(240,5%,15%)';
       ctx.lineWidth = 0.5;
       for (let p = minPitch; p <= maxPitch; p++) {
@@ -124,12 +133,11 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
         ctx.stroke();
       }
 
-      // Draw notes
+      // Notes
       for (const note of allNotes) {
         const x = ((note.time - viewStart) / viewWindow) * w;
         const noteW = (note.duration / viewWindow) * w;
-        const y =
-          h - ((note.pitch - minPitch) / pitchRange) * h - h / pitchRange;
+        const y = h - ((note.pitch - minPitch) / pitchRange) * h - h / pitchRange;
         const noteH = Math.max(2, h / pitchRange - 1);
 
         if (x + noteW < 0 || x > w) continue;
@@ -155,9 +163,10 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
       // Time marker
       ctx.fillStyle = 'hsl(0,0%,60%)';
       ctx.font = '10px Inter, sans-serif';
+      ctx.textAlign = 'left';
       ctx.fillText(`${time.toFixed(1)}s / ${duration.toFixed(1)}s`, 4, 12);
     },
-    [playbackData, selectedTrack]
+    [playbackData, selectedTrack, getVisibleNotes]
   );
 
   useEffect(() => {
@@ -170,11 +179,7 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
     setPlaying(false);
     cancelAnimationFrame(animFrameRef.current);
     scheduledRef.current.forEach((osc) => {
-      try {
-        osc.stop();
-      } catch {
-        // already stopped
-      }
+      try { osc.stop(); } catch { /* already stopped */ }
     });
     scheduledRef.current = [];
     if (audioCtxRef.current) {
@@ -188,43 +193,48 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
 
     const audioCtx = new AudioContext();
     audioCtxRef.current = audioCtx;
+
     const startOffset = currentTime;
-    startTimeRef.current = audioCtx.currentTime - startOffset;
+    const now = audioCtx.currentTime;
+
+    playStartWallRef.current = now;
+    playStartOffsetRef.current = startOffset;
 
     const tracks =
       selectedTrack !== null
         ? playbackData.tracks.filter((t) => t.index === selectedTrack)
         : playbackData.tracks;
 
-    const gainNode = audioCtx.createGain();
-    gainNode.gain.value = 0.08;
-    gainNode.connect(audioCtx.destination);
+    const masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.08;
+    masterGain.connect(audioCtx.destination);
 
     tracks.forEach((track) => {
       track.notes.forEach((note) => {
-        if (note.time + note.duration < startOffset) return;
+        const noteEndTime = note.time + note.duration;
+        if (noteEndTime < startOffset) return;
+
+        const relativeStart = note.time - startOffset;
+        const noteStart = now + Math.max(0, relativeStart);
+        const noteEnd = now + (noteEndTime - startOffset);
+
+        if (noteEnd <= now) return;
+
         const osc = audioCtx.createOscillator();
         const noteGain = audioCtx.createGain();
         osc.frequency.value = midiToFreq(note.pitch);
         osc.type = 'triangle';
 
         const attackTime = 0.01;
-        const noteStart = Math.max(
-          0,
-          note.time - startOffset + audioCtx.currentTime - startTimeRef.current + startOffset
-        );
-        const noteEnd = noteStart + note.duration;
+        const vol = note.velocity / 127;
 
         noteGain.gain.setValueAtTime(0, noteStart);
-        noteGain.gain.linearRampToValueAtTime(
-          note.velocity / 127,
-          noteStart + attackTime
-        );
-        noteGain.gain.setValueAtTime(note.velocity / 127, noteEnd - 0.02);
+        noteGain.gain.linearRampToValueAtTime(vol, noteStart + attackTime);
+        noteGain.gain.setValueAtTime(vol, Math.max(noteStart + attackTime, noteEnd - 0.02));
         noteGain.gain.linearRampToValueAtTime(0, noteEnd);
 
         osc.connect(noteGain);
-        noteGain.connect(gainNode);
+        noteGain.connect(masterGain);
 
         osc.start(noteStart);
         osc.stop(noteEnd + 0.05);
@@ -236,11 +246,11 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
 
     const animate = () => {
       if (!audioCtxRef.current) return;
-      const elapsed =
-        audioCtxRef.current.currentTime - startTimeRef.current;
-      setCurrentTime(elapsed + startOffset);
-      drawPianoRoll(elapsed + startOffset);
-      if (elapsed + startOffset < playbackData.duration) {
+      const elapsed = audioCtxRef.current.currentTime - playStartWallRef.current;
+      const t = playStartOffsetRef.current + elapsed;
+      setCurrentTime(t);
+      drawPianoRoll(t);
+      if (t < playbackData.duration) {
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
         stopPlayback();
@@ -252,7 +262,7 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
 
   if (!hasFile) {
     return (
-      <div className="flex items-center justify-center h-full text-muted-foreground text-xs">
+      <div className="flex items-center justify-center h-64 text-muted-foreground text-xs">
         Upload a file to see the player
       </div>
     );
@@ -260,7 +270,7 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full gap-2 text-muted-foreground text-xs">
+      <div className="flex items-center justify-center h-64 gap-2 text-muted-foreground text-xs">
         <Icons.Loader size={14} /> Loading playback data...
       </div>
     );
@@ -268,7 +278,7 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-full text-destructive text-xs">
+      <div className="flex items-center justify-center h-64 text-destructive text-xs">
         {error}
       </div>
     );
@@ -293,9 +303,7 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
             Original
           </button>
           <button
-            onClick={() => {
-              if (hasProcessed) setSource('processed');
-            }}
+            onClick={() => { if (hasProcessed) setSource('processed'); }}
             disabled={!hasProcessed}
             className={`px-2 text-[10px] rounded-sm font-medium transition disabled:opacity-40 ${source === 'processed' ? 'bg-surface text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
           >
@@ -307,9 +315,7 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
           <select
             value={selectedTrack ?? 'all'}
             onChange={(e) =>
-              setSelectedTrack(
-                e.target.value === 'all' ? null : Number(e.target.value)
-              )
+              setSelectedTrack(e.target.value === 'all' ? null : Number(e.target.value))
             }
             className="h-7 text-[10px] bg-surface-2 border border-border rounded-md px-2 text-foreground outline-none"
           >
@@ -332,19 +338,37 @@ export default function MidiPlayer({ hasFile, hasProcessed }: MidiPlayerProps) {
       <div className="bg-surface rounded-lg border border-border overflow-hidden">
         <canvas
           ref={canvasRef}
-          className="w-full"
-          style={{ height: '200px' }}
+          className="w-full cursor-pointer"
+          style={{ height: '220px' }}
           onClick={(e) => {
             if (!playbackData || playing) return;
             const rect = canvasRef.current!.getBoundingClientRect();
             const pct = (e.clientX - rect.left) / rect.width;
-            const viewWindow = 10;
+            const viewWindow = Math.min(playbackData.duration, 10);
             const viewStart = Math.max(0, currentTime - viewWindow * 0.3);
             const newTime = viewStart + pct * viewWindow;
             setCurrentTime(Math.max(0, Math.min(playbackData.duration, newTime)));
           }}
         />
       </div>
+
+      {/* Progress bar */}
+      {playbackData && (
+        <div
+          className="h-1 rounded-full bg-surface-2 overflow-hidden cursor-pointer"
+          onClick={(e) => {
+            if (!playbackData || playing) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const pct = (e.clientX - rect.left) / rect.width;
+            setCurrentTime(Math.max(0, pct * playbackData.duration));
+          }}
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-all duration-100"
+            style={{ width: `${(currentTime / (playbackData.duration || 1)) * 100}%` }}
+          />
+        </div>
+      )}
 
       {playbackData && (
         <div className="flex gap-2 flex-wrap">

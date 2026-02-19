@@ -313,6 +313,7 @@ export default function App() {
         showAdvanced={showAdvanced}
         onToggleAdvanced={setShowAdvanced}
         onOptimize={handleShowOptimize}
+        onReset={() => window.location.reload()}
         hasFile={!!uploadData}
       />
 
@@ -348,6 +349,7 @@ export default function App() {
           config={config}
           hasFile={!!uploadData}
           hasProcessed={!!processResult}
+          firstNoteTrackIdx={uploadData?.tracks.find(t => t.has_notes)?.index ?? null}
         />
         <RightPanel result={processResult} config={config} toast={toast} />
       </div>

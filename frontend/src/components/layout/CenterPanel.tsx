@@ -6,6 +6,7 @@ import ProcessorRow from '../results/ProcessorRow';
 import MetricsCharts from '../results/MetricsCharts';
 import ComparisonTable from '../results/ComparisonTable';
 import MidiPlayer from '../player/MidiPlayer';
+import NoteSheet from '../player/NoteSheet';
 import type { ProcessResult } from '../../api/client';
 import { DEFAULT_CONFIG, type MidiConfig } from '../../config';
 
@@ -14,6 +15,7 @@ interface CenterPanelProps {
   config: MidiConfig;
   hasFile: boolean;
   hasProcessed: boolean;
+  firstNoteTrackIdx: number | null;
 }
 
 type Tab = 'overview' | 'log' | 'player' | 'metrics' | 'comparison';
@@ -23,8 +25,11 @@ export default function CenterPanel({
   config,
   hasFile,
   hasProcessed,
+  firstNoteTrackIdx,
 }: CenterPanelProps) {
   const [tab, setTab] = useState<Tab>('overview');
+  const [playerSource] = useState<'original' | 'processed'>('original');
+  const playerTrack = firstNoteTrackIdx;
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'overview', label: 'Overview', icon: <Icons.FileMusic size={14} /> },
@@ -60,8 +65,14 @@ export default function CenterPanel({
         </div>
         <div className="flex-1 overflow-y-auto">
           {tab === 'player' ? (
-            <div className="p-6">
+            <div className="p-6 space-y-4">
               <MidiPlayer hasFile={hasFile} hasProcessed={hasProcessed} />
+              <NoteSheet
+                hasFile={hasFile}
+                hasProcessed={hasProcessed}
+                source={playerSource}
+                trackIndex={playerTrack}
+              />
             </div>
           ) : (
             <div className="flex items-center justify-center h-full">
@@ -152,7 +163,15 @@ export default function CenterPanel({
           </div>
         )}
         {tab === 'player' && (
-          <MidiPlayer hasFile={hasFile} hasProcessed={hasProcessed} />
+          <div className="space-y-4">
+            <MidiPlayer hasFile={hasFile} hasProcessed={hasProcessed} />
+            <NoteSheet
+              hasFile={hasFile}
+              hasProcessed={hasProcessed}
+              source={playerSource}
+              trackIndex={playerTrack}
+            />
+          </div>
         )}
         {tab === 'metrics' && result && <MetricsCharts result={result} />}
         {tab === 'comparison' && (

@@ -21,10 +21,16 @@ export interface UploadResponse {
 
 export interface ProcessorStep {
   name: string;
+  enabled: boolean;
   notes_removed: number;
   duration_ms: number;
-  effect: 'improvement' | 'neutral' | 'destructive';
-  details: string;
+  input_note_count: number;
+  output_note_count: number;
+  overlaps_resolved: number;
+  clusters_merged: number;
+  tempo_events_removed: number;
+  tracks_merged: boolean;
+  warnings: string[];
 }
 
 export interface ProcessingReport {
@@ -41,9 +47,9 @@ export interface ProcessResult {
 
 export interface PresetItem {
   id: string;
-  name: string;
+  label: string;
   description: string;
-  track_type: string;
+  track_types: string[];
 }
 
 export interface SuggestPresetResponse {
