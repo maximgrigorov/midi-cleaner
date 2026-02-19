@@ -19,6 +19,7 @@ run: build stop
 	podman run -d \
 		--name $(CONTAINER_NAME) \
 		-p $(LOCAL_PORT):5000 \
+		--add-host=host.containers.internal:host-gateway \
 		-e SECRET_KEY="$$(python3 -c 'import secrets; print(secrets.token_hex(32))')" \
 		$(IMAGE_NAME)
 	@echo "MIDI Cleaner running at http://localhost:$(LOCAL_PORT)"
@@ -63,6 +64,7 @@ deploy:
 			--name $(CONTAINER_NAME) \
 			--restart=always \
 			-p $(REMOTE_PORT):5000 \
+			--add-host=host.containers.internal:host-gateway \
 			-e SECRET_KEY=\"$$(python3 -c 'import secrets; print(secrets.token_hex(32))')\" \
 			$(IMAGE_NAME)"
 

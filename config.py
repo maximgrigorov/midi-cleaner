@@ -48,10 +48,13 @@ DEFAULT_CONFIG = {
     # Per-track overrides: { track_index: { param: value, ... } }
     'track_overrides': {},
 
-    # LLM guidance (optional)
+    # LLM guidance (optional).
+    # Inside a podman container, the host is reachable via host.containers.internal
+    # (requires --add-host=host.containers.internal:host-gateway on podman run).
+    # When running outside a container (dev mode) use localhost or alma directly.
     'llm': {
         'enabled': False,
-        'api_base': 'http://alma:4000',
+        'api_base': 'http://host.containers.internal:4000',
         'model': 'gpt-4o-mini',
         'max_calls': 3,
         'max_tokens': 600,
