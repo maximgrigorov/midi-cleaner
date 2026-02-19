@@ -54,18 +54,27 @@ deploy:
 		--exclude '.DS_Store' \
 		./ $(DEPLOY_USER)@$(DEPLOY_HOST):$(DEPLOY_DIR)/
 
-	@echo "==> Building and starting container on $(DEPLOY_HOST)..."
+	@echo "==> Building and starting container on $(DEPLOY_HOST) as $(DEPLOY_USER)..."
 	$(SSH) "cd $(DEPLOY_DIR) && \
-		sudo podman stop $(CONTAINER_NAME) 2>/dev/null || true && \
-		sudo podman rm $(CONTAINER_NAME) 2>/dev/null || true && \
-		sudo podman build -t $(IMAGE_NAME) . && \
-		sudo podman run -d \
+		podman stop $(CONTAINER_NAME) 2>/dev/null || true && \
+		podman rm $(CONTAINER_NAME) 2>/dev/null || true && \
+		podman build -t $(IMAGE_NAME) . && \
+		podman run -d \
 			--name $(CONTAINER_NAME) \
 			--restart=always \
 			-p $(REMOTE_PORT):5000 \
 			-e SECRET_KEY=\"$$(python3 -c 'import secrets; print(secrets.token_hex(32))')\" \
 			$(IMAGE_NAME)"
 
+	@echo "==> Enabling lingering for $(DEPLOY_USER) and generating systemd unit..."
+	$(SSH) "loginctl enable-linger $(DEPLOY_USER) 2>/dev/null || true && \
+		mkdir -p ~/.config/systemd/user && \
+		podman generate systemd --name $(CONTAINER_NAME) --new --files && \
+		mv container-$(CONTAINER_NAME).service ~/.config/systemd/user/ 2>/dev/null || true && \
+		systemctl --user daemon-reload && \
+		systemctl --user enable container-$(CONTAINER_NAME).service 2>/dev/null || true"
+
 	@echo ""
 	@echo "✓ Deployed! MIDI Cleaner running at http://$(DEPLOY_HOST):$(REMOTE_PORT)"
-	@echo "  Container auto-starts on server reboot via systemd."
+	@echo "  Container runs as $(DEPLOY_USER) (rootless podman)."
+	@echo "  Auto-starts on reboot via user-level systemd + lingering."

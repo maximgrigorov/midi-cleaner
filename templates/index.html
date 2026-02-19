@@ -57,22 +57,30 @@
         </div>
     </section>
 
-    <!-- Global Configuration -->
-    <section class="config-panel">
+    <!-- Mode Selector -->
+    <section class="mode-selector" id="mode-selector">
         <h2 data-i18n="processing_settings">Processing Settings</h2>
-        <div class="preset-bar">
-            <div class="preset-select-group">
-                <label for="cfg-preset" data-i18n="preset_label">Preset</label>
-                <select id="cfg-preset">
-                    <option value="" data-i18n-opt="preset_auto">Auto (Recommended)</option>
-                </select>
-                <span class="preset-desc" id="preset-desc"></span>
-            </div>
-            <label class="lock-toggle" for="cfg-lock-advanced">
-                <input type="checkbox" id="cfg-lock-advanced">
-                <span data-i18n="lock_advanced">Show Advanced</span>
-            </label>
+        <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="preset" data-i18n="mode_preset">Preset</button>
+            <button class="mode-tab" data-mode="auto" data-i18n="mode_auto">Auto-Tune</button>
+            <button class="mode-tab" data-mode="manual" data-i18n="mode_manual">Manual</button>
         </div>
+        <!-- Preset mode content -->
+        <div class="mode-content" id="mode-preset-content">
+            <div class="preset-bar">
+                <div class="preset-select-group">
+                    <label for="cfg-preset" data-i18n="preset_label">Preset</label>
+                    <select id="cfg-preset">
+                        <option value="" data-i18n-opt="preset_auto">Auto (Recommended)</option>
+                    </select>
+                    <span class="preset-desc" id="preset-desc"></span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Global Configuration (Manual mode — hidden by default) -->
+    <section class="config-panel" id="config-panel" style="display:none">
         <div class="config-grid">
             <div class="config-item">
                 <label for="cfg-tempo-dedup">
@@ -95,14 +103,14 @@
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-remove-overlaps" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item" data-advanced>
+            <div class="config-item">
                 <label for="cfg-remove-triplets">
                     <span data-i18n="remove_triplets">Remove Triplets</span>
                     <span class="desc" data-i18n="remove_triplets_desc">Convert triplet notes to straight eighths</span>
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-remove-triplets" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item" data-advanced>
+            <div class="config-item">
                 <label>
                     <span data-i18n="triplet_tolerance">Triplet Tolerance</span>
                     <span class="desc" data-i18n="triplet_tolerance_desc">Detection sensitivity (0.05=strict, 0.25=loose)</span>
@@ -112,14 +120,14 @@
                     <span class="value">0.15</span>
                 </div>
             </div>
-            <div class="config-item" data-advanced>
+            <div class="config-item">
                 <label for="cfg-quantize">
                     <span data-i18n="quantize">Quantize</span>
                     <span class="desc" data-i18n="quantize_desc">Snap note timing to rhythmic grid</span>
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-quantize" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item" data-advanced>
+            <div class="config-item">
                 <label for="cfg-quantize-grid">
                     <span data-i18n="grid_resolution">Grid Resolution</span>
                     <span class="desc" data-i18n="grid_resolution_desc">Quantization grid size</span>
@@ -130,14 +138,14 @@
                     <option value="sixteenth" data-i18n-opt="sixteenth">Sixteenth note</option>
                 </select>
             </div>
-            <div class="config-item" data-advanced>
+            <div class="config-item">
                 <label for="cfg-remove-cc">
                     <span data-i18n="remove_cc">Remove CC Messages</span>
                     <span class="desc" data-i18n="remove_cc_desc">Strip control change messages</span>
                 </label>
                 <label class="toggle"><input type="checkbox" id="cfg-remove-cc" checked><span class="slider"></span></label>
             </div>
-            <div class="config-item" data-advanced>
+            <div class="config-item">
                 <label>
                     <span data-i18n="cc_to_remove">CC Numbers to Remove</span>
                     <span class="desc" data-i18n="cc_to_remove_desc">Select which CC to strip</span>
@@ -242,8 +250,8 @@
         </div>
     </section>
 
-    <!-- Auto Optimize Panel -->
-    <section class="optimize-panel" id="optimize-panel">
+    <!-- Auto Optimize Panel (Auto mode — hidden by default) -->
+    <section class="optimize-panel" id="optimize-panel" style="display:none">
         <h2 data-i18n="auto_optimize">Auto Optimize</h2>
         <div class="optimize-body">
             <div class="optimize-controls">

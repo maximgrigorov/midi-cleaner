@@ -42,6 +42,7 @@ const I18N = {
         opt_current_params: 'Current Best Parameters', opt_apply: 'Apply Best Parameters',
         opt_done: 'Done', opt_stopped: 'Stopped', opt_error: 'Error',
         opt_applied: 'Optimized parameters applied! Click Download.',
+        mode_preset: 'Preset', mode_auto: 'Auto-Tune', mode_manual: 'Manual',
         preset_label: 'Preset', preset_auto: 'Auto (Recommended)',
         lock_advanced: 'Show Advanced',
         processing_log: 'Processing Log', log_total_time: 'Total Time:',
@@ -93,6 +94,7 @@ const I18N = {
         opt_current_params: 'Лучшие параметры', opt_apply: 'Применить лучшие параметры',
         opt_done: 'Готово', opt_stopped: 'Остановлено', opt_error: 'Ошибка',
         opt_applied: 'Оптимизированные параметры применены! Нажмите Скачать.',
+        mode_preset: 'Пресет', mode_auto: 'Авто-тюнинг', mode_manual: 'Вручную',
         preset_label: 'Пресет', preset_auto: 'Авто (рекомендуемый)',
         lock_advanced: 'Показать расширенные',
         processing_log: 'Лог обработки', log_total_time: 'Общее время:',
@@ -232,7 +234,10 @@ function showFileInfo(data) {
 // ─────────────────────────────────────────────
 //  Configuration
 // ─────────────────────────────────────────────
-function showConfig() { $('.config-panel').classList.add('visible'); }
+function showConfig() {
+    $('#mode-selector').classList.add('visible');
+    switchMode('preset');
+}
 
 function readGlobalConfig() {
     const presetEl = $('#cfg-preset');
@@ -418,8 +423,7 @@ function downloadFile() { window.location.href = '/api/download'; }
 let optimizePollTimer = null;
 
 function showOptimizePanel() {
-    const panel = $('#optimize-panel');
-    if (panel) panel.classList.add('visible');
+    // No longer auto-shows; controlled by mode switcher
 }
 
 async function startOptimization() {
@@ -520,6 +524,9 @@ async function applyOptimized() {
         $('#btn-download').style.display = 'inline-flex';
         $('#player-src-processed').disabled = false;
 
+        // Apply the best params to the UI config fields
+        if (data.best_params) applyOptimizerParamsToUI(data.best_params);
+
         if (state.fileInfo && data.tracks) {
             state.fileInfo.tracks.forEach((orig, i) => {
                 const pt = data.tracks[i];
@@ -536,6 +543,28 @@ async function applyOptimized() {
     } catch (err) {
         toast(t('process_fail') + ': ' + err.message, 'error');
     }
+}
+
+function applyOptimizerParamsToUI(params) {
+    const cfg = {};
+    if (params.min_duration !== undefined) cfg.min_duration_ticks = params.min_duration;
+    if (params.min_velocity !== undefined) cfg.min_velocity = params.min_velocity;
+    if (params.merge_voices !== undefined) cfg.merge_voices = params.merge_voices;
+    if (params.quantize !== undefined) cfg.quantize = params.quantize;
+    if (params.remove_triplets !== undefined) cfg.remove_triplets = params.remove_triplets;
+    if (params.cluster_window !== undefined || params.cluster_pitch !== undefined) {
+        cfg.pitch_cluster = { enabled: true };
+        if (params.cluster_window !== undefined) cfg.pitch_cluster.time_window_ticks = params.cluster_window;
+        if (params.cluster_pitch !== undefined) cfg.pitch_cluster.pitch_threshold = params.cluster_pitch;
+    }
+    if (params.same_pitch_resolver !== undefined) {
+        cfg.same_pitch_overlap_resolver = { enabled: params.same_pitch_resolver };
+    }
+    if (params.triplet_tolerance !== undefined) {
+        const el = $('#cfg-triplet-tolerance');
+        if (el) { el.value = params.triplet_tolerance; updateSliderDisplay('#cfg-triplet-tolerance'); }
+    }
+    applyConfigToUI(cfg);
 }
 
 // ─────────────────────────────────────────────
@@ -1023,15 +1052,33 @@ async function suggestPreset() {
 }
 
 // ─────────────────────────────────────────────
-//  Advanced Fields Lock
+//  Mode Switcher (Preset / Auto-Tune / Manual)
 // ─────────────────────────────────────────────
-function initAdvancedToggle() {
-    const cb = $('#cfg-lock-advanced');
-    if (!cb) return;
-    const grid = document.querySelector('.config-grid');
-    cb.addEventListener('change', () => {
-        if (cb.checked) grid.classList.add('show-advanced');
-        else grid.classList.remove('show-advanced');
+let currentMode = 'preset';
+
+function switchMode(mode) {
+    currentMode = mode;
+    const configPanel = $('#config-panel');
+    const optimizePanel = $('#optimize-panel');
+    const presetContent = $('#mode-preset-content');
+
+    // Update tab highlighting
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.mode === mode);
+    });
+
+    // Show/hide panels based on mode
+    if (presetContent) presetContent.style.display = mode === 'preset' ? '' : 'none';
+    if (configPanel) configPanel.style.display = mode === 'manual' ? '' : 'none';
+    if (optimizePanel) {
+        optimizePanel.style.display = mode === 'auto' ? '' : 'none';
+        if (mode === 'auto') optimizePanel.classList.add('visible');
+    }
+}
+
+function initModeTabs() {
+    document.querySelectorAll('.mode-tab').forEach(tab => {
+        tab.addEventListener('click', () => switchMode(tab.dataset.mode));
     });
 }
 
@@ -1059,7 +1106,7 @@ function updateLLMSuggestionsUI(decisions) {
 document.addEventListener('DOMContentLoaded', () => {
     initUpload();
     initSliders();
-    initAdvancedToggle();
+    initModeTabs();
     loadPresets();
 
     $('#lang-toggle').addEventListener('click', toggleLanguage);

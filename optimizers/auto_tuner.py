@@ -289,15 +289,21 @@ class AutoTuner:
             show_progress_bar=False,
         )
 
-        best = study.best_trial
-        best_params = best.params
+        # Use our own trials list instead of study.best_trial.params because
+        # LLM-overridden trials bypass Optuna's suggest_* and won't have
+        # their params stored in the study object.
+        if not self._trials:
+            raise RuntimeError('No trials completed')
+
+        best_trial = max(self._trials, key=lambda t: t.score)
+        best_params = best_trial.params
         best_config = self._params_to_config(best_params)
 
         reason = early_stop.stop_reason or f'max trials ({self.max_trials})'
 
         result = OptimizationResult(
             best_params=best_params,
-            best_score=round(best.value, 4),
+            best_score=round(best_trial.score, 4),
             best_config=best_config,
             trials=self._trials,
             stop_reason=reason,
