@@ -9,9 +9,9 @@ import traceback
 import mido
 import mido.midifiles.meta as _mido_meta
 from flask import (
-    Flask, request, jsonify, send_file,
-    render_template, session,
+    Flask, request, jsonify, send_file, session,
 )
+from flask_cors import CORS
 
 # Patch mido to tolerate invalid key_signature events from AI-generated MIDI.
 # Suno and other AI tools produce garbage key values (e.g. 17 sharps) that
@@ -41,6 +41,13 @@ from utils.midi_helpers import get_tempo
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'midi-cleaner-dev-key-change-in-prod')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload
+
+CORS(app, supports_credentials=True, origins=[
+    "http://localhost:5173",
+    "http://localhost:8080",
+    "http://localhost:80",
+    "http://localhost",
+])
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -74,11 +81,6 @@ def _load_midi(source='original'):
 
 
 # ── Routes ──
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
 
 @app.route('/docs/')
 @app.route('/docs/<path:filename>')

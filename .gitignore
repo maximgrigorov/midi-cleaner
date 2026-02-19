@@ -19,12 +19,13 @@ htmlcov/
 
 node_modules/
 playwright-browsers/
+frontend/dist/
 
 .DS_Store
 Thumbs.db
 
 *.mid
 *.midi
-!tests/assets/*.mid
-tests/output/
+!backend/tests/assets/*.mid
+backend/tests/output/
 package-lock.json

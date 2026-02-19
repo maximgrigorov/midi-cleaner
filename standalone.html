@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MIDI Obfuscator</title>
+<meta name="description" content="Clean and optimize MIDI files for notation software"/>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        background: 'hsl(var(--background))',
+        foreground: 'hsl(var(--foreground))',
+        card: 'hsl(var(--card))',
+        'card-foreground': 'hsl(var(--card-foreground))',
+        primary: 'hsl(var(--primary))',
+        'primary-foreground': 'hsl(var(--primary-foreground))',
+        secondary: 'hsl(var(--secondary))',
+        'secondary-foreground': 'hsl(var(--secondary-foreground))',
+        muted: 'hsl(var(--muted))',
+        'muted-foreground': 'hsl(var(--muted-foreground))',
+        accent: 'hsl(var(--accent))',
+        'accent-foreground': 'hsl(var(--accent-foreground))',
+        destructive: 'hsl(var(--destructive))',
+        'destructive-foreground': 'hsl(var(--destructive-foreground))',
+        success: 'hsl(var(--success))',
+        'success-foreground': 'hsl(var(--success-foreground))',
+        warning: 'hsl(var(--warning))',
+        'warning-foreground': 'hsl(var(--warning-foreground))',
+        border: 'hsl(var(--border))',
+        input: 'hsl(var(--input))',
+        ring: 'hsl(var(--ring))',
+        surface: 'hsl(var(--surface))',
+        'surface-2': 'hsl(var(--surface-2))',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'monospace'],
+      },
+    },
+  },
+};
+</script>
+<style>
+:root {
+  --background: 0 0% 9%;
+  --foreground: 0 0% 98%;
+  --card: 0 0% 14%;
+  --card-foreground: 0 0% 98%;
+  --primary: 234 89% 73%;
+  --primary-foreground: 243 47% 20%;
+  --secondary: 0 0% 45%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 0 0% 45%;
+  --muted-foreground: 0 0% 98%;
+  --accent: 261 72% 22%;
+  --accent-foreground: 255 91% 76%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 85% 97%;
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 0%;
+  --border: 0 0% 32%;
+  --input: 0 0% 32%;
+  --ring: 234 89% 73%;
+  --surface: 240 10% 10.5%;
+  --surface-2: 240 10% 14%;
+}
+* { box-sizing: border-box; border-color: hsl(var(--border)); }
+html { font-size: 14px; }
+body { margin:0; background: hsl(var(--background)); color: hsl(var(--foreground)); font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: hsl(240 5% 20%); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(240 5% 30%); }
+/* Custom range slider */
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; background: hsl(var(--surface-2)); outline: none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 12px; height: 12px; border-radius: 50%; background: hsl(var(--primary)); cursor: pointer; }
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: hsl(var(--primary)); cursor: pointer; border: 0; }
+/* Toggle switch */
+.toggle-switch { position: relative; width: 36px; height: 20px; border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+.toggle-switch.on { background: hsl(var(--primary)); }
+.toggle-switch.off { background: hsl(var(--surface-2)); }
+.toggle-switch .knob { position: absolute; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: white; transition: left 0.15s; }
+.toggle-switch.on .knob { left: 18px; }
+.toggle-switch.off .knob { left: 2px; }
+/* Tooltip */
+.tip-wrap { position: relative; display: inline-flex; }
+.tip-wrap .tip-text { visibility: hidden; opacity: 0; position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); background: hsl(var(--surface-2)); border: 1px solid hsl(var(--border)); color: hsl(var(--foreground)); padding: 6px 10px; border-radius: 6px; font-size: 11px; line-height: 1.5; max-width: 280px; width: max-content; z-index: 50; pointer-events: none; transition: opacity 0.15s; }
+.tip-wrap:hover .tip-text { visibility: visible; opacity: 1; }
+/* Toast */
+.toast-container { position: fixed; bottom: 16px; right: 16px; z-index: 100; display: flex; flex-direction: column; gap: 8px; }
+.toast-item { background: hsl(var(--surface-2)); border: 1px solid hsl(var(--border)); border-radius: 8px; padding: 12px 16px; font-size: 12px; color: hsl(var(--foreground)); animation: slideIn 0.3s ease; min-width: 250px; }
+.toast-item.destructive { border-color: hsl(var(--destructive)); }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fadeIn 0.3s ease; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, createElement: h } = React;
+const { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, PieChart, Pie, Cell } = Recharts;
+// ─── SVG Icons ───────────────────────────────────
+const Icon = ({ d, size = 14, className = '' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    {Array.isArray(d) ? d.map((p, i) => <path key={i} d={p}/>) : <path d={d}/>}
+  </svg>
+);
+const Icons = {
+  Music: (p) => <Icon {...p} d={["M9 18V5l12-2v13","M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0z","M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"]}/>,
+  Upload: (p) => <Icon {...p} d={["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4","M17 8l-5-5-5 5","M12 3v12"]}/>,
+  Download: (p) => <Icon {...p} d={["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4","M7 10l5 5 5-5","M12 15V3"]}/>,
+  Sparkles: (p) => <Icon {...p} d={["M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z","M18 14l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z"]}/>,
+  Settings: (p) => <Icon {...p} d={["M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z","M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"]}/>,
+  ChevronDown: (p) => <Icon {...p} d="M6 9l6 6 6-6"/>,
+  Help: (p) => <Icon {...p} d={["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z","M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3","M12 17h.01"]}/>,
+  Loader: (p) => <Icon {...p} d={["M21 12a9 9 0 1 1-6.219-8.56"]} className={`${p.className||''} animate-spin`}/>,
+  Check: (p) => <Icon {...p} d="M20 6L9 17l-5-5"/>,
+  X: (p) => <Icon {...p} d={["M18 6L6 18","M6 6l12 12"]}/>,
+  Copy: (p) => <Icon {...p} d={["M20 9h-9a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2z","M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"]}/>,
+  Code: (p) => <Icon {...p} d={["M16 18l6-6-6-6","M8 6l-6 6 6 6"]}/>,
+  FileMusic: (p) => <Icon {...p} d={["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z","M14 2v6h6","M10 16s.8-2 2-2 2 2 2 2-2","M10 12v4"]}/>,
+  BarChart: (p) => <Icon {...p} d={["M18 20V10","M12 20V4","M6 20v-6"]}/>,
+  GitCompare: (p) => <Icon {...p} d={["M18 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","M6 7a2 2 0 1 0 0-4 2 2 0 0 0 0 4z","M6 7v8a2 2 0 0 0 2 2h2","M18 17V9a2 2 0 0 0-2-2h-2"]}/>,
+  List: (p) => <Icon {...p} d={["M8 6h13","M8 12h13","M8 18h13","M3 6h.01","M3 12h.01","M3 18h.01"]}/>,
+};
+// ─── Tooltips ────────────────────────────────────
+const TOOLTIPS = {
+  tempo_deduplicator: 'AI transcription tools often write the tempo marker hundreds of times. This removes the duplicates so notation software doesn\'t clutter your score.',
+  merge_voices: 'Reduces unnecessary "voices" in the staff. Use ON for melody and bass; OFF for piano or strings where multiple voices are intentional.',
+  remove_overlaps: 'Notes that start before the previous one ends force notation software to create extra voices. Almost always safe to enable.',
+  same_pitch_overlap_resolver: 'When two identical notes overlap, keeps the better one (longer duration wins) and removes the other.',
+  filter_noise: 'Removes notes that are too short or too quiet to be real — the musical equivalent of background noise.',
+  min_duration_ticks: 'Notes shorter than this are removed. 120 ticks ≈ a sixteenth note. 240 ticks ≈ an eighth note.',
+  min_velocity: 'Notes quieter than this (0–127 scale) are removed. Default 20 catches ghost notes without touching real ones.',
+  remove_triplets: 'Converts triplet-like note durations back to straight rhythms. Turn OFF for jazz or swing.',
+  triplet_tolerance: 'How aggressively to detect triplets. Higher = catches more, but may incorrectly convert some notes.',
+  quantize: 'Snaps note timing to a rhythmic grid. Makes scores look cleaner but may remove expressive timing. Turn OFF for rubato or FX.',
+  quantize_grid: 'The rhythmic grid size for quantization. Eighth note works for most music.',
+  remove_cc: 'Strips sustain pedal (CC#64) and legato (CC#68) data. Good for notation cleanup; turn OFF if you need realistic MIDI playback.',
+  pitch_cluster: 'Merges notes that are very close in both pitch and time — likely transcription noise, not real notes.',
+  time_window_ticks: 'How close in time two notes must be (in ticks) to be considered simultaneous.',
+  pitch_threshold: 'How many semitones apart two notes can be and still get merged. 1 = merge if within one semitone.',
+  start_bar: 'Skip the first N bars. Useful if you\'ve already cleaned part of the file.',
+  merge_tracks: 'Combines all tracks into one (Type 0 MIDI). Loses track separation — use only if specifically needed.',
+  llm: 'Uses an AI model to suggest better parameters when the optimizer gets stuck. Optional; uses your local LLM endpoint.',
+  auto_optimize: 'Automatically tries many parameter combinations and picks the one that produces the cleanest score. Takes 1–2 minutes.',
+};
+// ─── Default Config ──────────────────────────────
+const DEFAULT_CONFIG = {
+  tempo_deduplicator: { enabled: true },
+  merge_voices: true,
+  remove_overlaps: true,
+  same_pitch_overlap_resolver: { enabled: true },
+  filter_noise: true,
+  min_duration_ticks: 120,
+  min_velocity: 20,
+  remove_triplets: true,
+  quantize: true,
+  quantize_grid: 'eighth',
+  triplet_tolerance: 0.15,
+  remove_cc: true,
+  cc_numbers: [64, 68],
+  pitch_cluster: { enabled: true, time_window_ticks: 20, pitch_threshold: 1 },
+  start_bar: 1,
+  merge_tracks: { enabled: false, include_cc: false },
+  llm: { enabled: true, model: 'gpt-4o-mini', max_calls: 3 },
+};
+// ─── Mock Data ───────────────────────────────────
+const MOCK_UPLOAD = {
+  file_id: 'mock-001', filename: 'guitar_solo.mid', type: 1, ticks_per_beat: 480, num_tracks: 3,
+  tracks: [
+    { index: 0, name: 'Tempo Track', track_type: 'unknown', note_count: 0, note_range: [0, 0], suggested_thresholds: {} },
+    { index: 1, name: 'Lead Guitar', track_type: 'guitar', note_count: 847, note_range: [40, 84], suggested_thresholds: { min_duration: 120, min_velocity: 20 } },
+    { index: 2, name: 'Bass', track_type: 'bass', note_count: 312, note_range: [28, 55], suggested_thresholds: { min_duration: 200, min_velocity: 30 } },
+  ],
+};
+const MOCK_PRESETS = [
+  { id: 'clean-guitar', name: 'Clean Guitar', description: 'Optimized for single-line guitar transcriptions', track_type: 'guitar' },
+  { id: 'clean-bass', name: 'Clean Bass', description: 'Tailored for bass lines with low register filtering', track_type: 'bass' },
+  { id: 'clean-vocal', name: 'Clean Vocal', description: 'Melody-focused with aggressive noise removal', track_type: 'vocal' },
+  { id: 'gentle', name: 'Gentle Clean', description: 'Minimal processing — preserves expression', track_type: 'unknown' },
+  { id: 'aggressive', name: 'Aggressive Clean', description: 'Maximum cleanup for messy transcriptions', track_type: 'unknown' },
+];
+const MOCK_PROCESS = {
+  success: true, file_id: 'mock-001', tracks: MOCK_UPLOAD.tracks,
+  report: {
+    preset_applied: 'clean-guitar',
+    steps: [
+      { name: 'Tempo Deduplication', notes_removed: 0, duration_ms: 12, effect: 'improvement', details: 'Removed 847 duplicate tempo events, keeping 1 unique marker.' },
+      { name: 'Voice Merging', notes_removed: 23, duration_ms: 45, effect: 'improvement', details: 'Merged 4 voices into 2. Removed 23 redundant notes.' },
+      { name: 'Overlap Removal', notes_removed: 67, duration_ms: 38, effect: 'improvement', details: 'Fixed 67 overlapping note pairs across 312 measures.' },
+      { name: 'Same-Pitch Resolver', notes_removed: 12, duration_ms: 8, effect: 'neutral', details: 'Resolved 12 same-pitch overlaps. Kept longer duration in each case.' },
+      { name: 'Noise Filter', notes_removed: 45, duration_ms: 15, effect: 'improvement', details: 'Removed 31 notes below 120 ticks and 14 notes below velocity 20.' },
+      { name: 'Triplet Removal', notes_removed: 8, duration_ms: 22, effect: 'neutral', details: 'Converted 8 triplet-like durations to straight rhythms.' },
+      { name: 'Quantization', notes_removed: 0, duration_ms: 55, effect: 'improvement', details: 'Snapped 234 note onsets to eighth-note grid.' },
+      { name: 'CC Removal', notes_removed: 0, duration_ms: 3, effect: 'neutral', details: 'Stripped 156 CC#64 (sustain) and 42 CC#68 (legato) events.' },
+      { name: 'Pitch Cluster Merge', notes_removed: 15, duration_ms: 18, effect: 'improvement', details: 'Merged 15 near-simultaneous notes within 1 semitone.' },
+    ],
+  },
+};
+const MOCK_PRESET_CONFIGS = {
+  'clean-guitar': { min_duration_ticks: 120, min_velocity: 20, remove_triplets: true, quantize_grid: 'eighth' },
+  'clean-bass': { min_duration_ticks: 200, min_velocity: 30, remove_triplets: false, quantize_grid: 'quarter' },
+  'clean-vocal': { min_duration_ticks: 100, min_velocity: 15, remove_triplets: true, quantize_grid: 'sixteenth' },
+  'gentle': { filter_noise: false, remove_triplets: false, quantize: false },
+  'aggressive': { min_duration_ticks: 240, min_velocity: 40, triplet_tolerance: 0.25 },
+};
+// ─── API Client ──────────────────────────────────
+const USE_MOCK = true;
+const API_BASE = 'http://localhost:5000';
+const delay = (ms) => new Promise(r => setTimeout(r, ms));
+async function apiFetch(path, init) {
+  const res = await fetch(`${API_BASE}${path}`, { ...init, credentials: 'include' });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json();
+}
+async function apiBlobFetch(path) {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.blob();
+}
+async function uploadFile(file) {
+  if (USE_MOCK) { await delay(800); return { ...MOCK_UPLOAD, filename: file.name }; }
+  const fd = new FormData(); fd.append('file', file);
+  return apiFetch('/api/upload', { method: 'POST', body: fd });
+}
+async function fetchPresets() {
+  if (USE_MOCK) { await delay(300); return MOCK_PRESETS; }
+  return (await apiFetch('/api/presets')).presets;
+}
+async function fetchPresetConfig(id) {
+  if (USE_MOCK) { await delay(200); return MOCK_PRESET_CONFIGS[id] || {}; }
+  return (await apiFetch(`/api/presets/${id}`)).config;
+}
+async function suggestPreset() {
+  if (USE_MOCK) { await delay(400); return { track_type: 'guitar', preset_id: 'clean-guitar', config: { min_duration_ticks: 120, min_velocity: 20 } }; }
+  return apiFetch('/api/presets/suggest');
+}
+async function processFile(config) {
+  if (USE_MOCK) { await delay(1500); return MOCK_PROCESS; }
+  return apiFetch('/api/process', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
+}
+async function downloadMidi() {
+  if (USE_MOCK) { await delay(300); return new Blob(['mock'], { type: 'audio/midi' }); }
+  return apiBlobFetch('/api/download');
+}
+async function downloadReport() {
+  if (USE_MOCK) { await delay(200); return new Blob([JSON.stringify(MOCK_PROCESS.report, null, 2)], { type: 'application/json' }); }
+  return apiBlobFetch('/api/report/download');
+}
+let mockTrialCounter = 0, mockOptRunning = false;
+async function startOptimize() {
+  mockTrialCounter = 0; mockOptRunning = false;
+  if (USE_MOCK) { await delay(300); return; }
+  await apiFetch('/api/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ max_trials: 40 }) });
+}
+async function fetchOptimizeStatus() {
+  if (USE_MOCK) {
+    await delay(200);
+    if (!mockOptRunning) { mockOptRunning = true; mockTrialCounter = 0; }
+    mockTrialCounter += 3;
+    const total = 40, done = mockTrialCounter >= total;
+    if (done) mockOptRunning = false;
+    return {
+      status: done ? 'done' : 'running', current_trial: Math.min(mockTrialCounter, total), total_trials: total,
+      best_score: done ? 0.92 : 0.45 + Math.random() * 0.4,
+      best_params: { min_duration_ticks: 150, min_velocity: 25 },
+      current_params: { min_duration_ticks: 100 + Math.floor(Math.random() * 200), min_velocity: 10 + Math.floor(Math.random() * 50) },
+      track_type: 'guitar', stop_reason: done ? 'converged' : '', trials: [],
+      llm_decisions: done ? [
+        { suggestion: 'Increase min_duration to 150 ticks', reason: 'Short notes below 150 ticks are likely transcription artifacts in guitar parts', applied: true },
+        { suggestion: 'Disable triplet removal', reason: 'Jazz-style phrasing detected — triplets may be intentional', applied: false },
+      ] : undefined,
+      best_config: done ? DEFAULT_CONFIG : undefined,
+    };
+  }
+  return apiFetch('/api/optimize/status');
+}
+async function applyOptimize() {
+  if (USE_MOCK) { await delay(400); return { success: true, best_params: { min_duration_ticks: 150, min_velocity: 25 }, best_score: 0.92 }; }
+  return apiFetch('/api/optimize/apply', { method: 'POST' });
+}
+// ─── Toast System ────────────────────────────────
+let toastIdCounter = 0;
+function ToastProvider({ children }) {
+  const [toasts, setToasts] = useState([]);
+  const addToast = useCallback((t) => {
+    const id = ++toastIdCounter;
+    setToasts(prev => [...prev, { ...t, id }]);
+    setTimeout(() => setToasts(prev => prev.filter(x => x.id !== id)), 5000);
+  }, []);
+  return (
+    <>
+      {children(addToast)}
+      <div className="toast-container">
+        {toasts.map(t => (
+          <div key={t.id} className={`toast-item ${t.variant === 'destructive' ? 'destructive' : ''}`}>
+            <div className="font-medium">{t.title}</div>
+            {t.description && <div className="text-muted-foreground mt-1">{t.description}</div>}
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+// ─── Primitives ──────────────────────────────────
+function InfoTooltip({ text }) {
+  return (
+    <span className="tip-wrap">
+      <button type="button" className="inline-flex items-center justify-center rounded-sm p-0.5 text-muted-foreground hover:text-foreground transition-colors">
+        <Icons.Help size={14}/>
+      </button>
+      <span className="tip-text">{text}</span>
+    </span>
+  );
+}
+function Toggle({ checked, onChange, disabled }) {
+  return (
+    <button type="button" disabled={disabled} onClick={() => onChange(!checked)}
+      className={`toggle-switch ${checked ? 'on' : 'off'} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+      <span className="knob"/>
+    </button>
+  );
+}
+function ToggleRow({ label, checked, onChange, tooltip, disabled }) {
+  return (
+    <div className="flex items-center justify-between py-1.5 group">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-foreground">{label}</span>
+        {tooltip && <InfoTooltip text={tooltip}/>}
+      </div>
+      <Toggle checked={checked} onChange={onChange} disabled={disabled}/>
+    </div>
+  );
+}
+function SliderRow({ label, value, onChange, min, max, step, tooltip, disabled, format }) {
+  return (
+    <div className="py-1.5 space-y-1.5">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-foreground">{label}</span>
+          {tooltip && <InfoTooltip text={tooltip}/>}
+        </div>
+        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface-2 text-muted-foreground">
+          {format ? format(value) : value}
+        </span>
+      </div>
+      <input type="range" value={value} onChange={e => onChange(parseFloat(e.target.value))} min={min} max={max} step={step} disabled={disabled}/>
+    </div>
+  );
+}
+function SelectRow({ label, value, options, onChange, tooltip, disabled }) {
+  return (
+    <div className="py-1.5 space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs text-foreground">{label}</span>
+        {tooltip && <InfoTooltip text={tooltip}/>}
+      </div>
+      <div className="flex rounded-md bg-surface-2 p-0.5">
+        {options.map(opt => (
+          <button key={opt.value} type="button" disabled={disabled} onClick={() => onChange(opt.value)}
+            className={`flex-1 rounded-sm px-2 py-1 text-[10px] font-medium transition-all duration-150 ${value === opt.value ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+function Panel({ title, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="border-b border-border">
+      <button type="button" onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors">
+        {title}
+        <span style={{ transform: open ? 'rotate(180deg)' : 'rotate(0)', transition: 'transform 0.2s', display: 'inline-block' }}>
+          <Icons.ChevronDown size={14}/>
+        </span>
+      </button>
+      <div style={{ maxHeight: open ? '2000px' : '0', opacity: open ? 1 : 0, overflow: 'hidden', transition: 'all 0.2s' }}>
+        <div className="px-4 pb-3 space-y-2">{children}</div>
+      </div>
+    </div>
+  );
+}
+function EmptyState({ title, description }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
+      <div className="rounded-full bg-surface-2 p-5"><Icons.Music size={32} className="text-muted-foreground"/></div>
+      <div>
+        <h3 className="text-sm font-medium text-foreground mb-1">{title}</h3>
+        <p className="text-xs text-muted-foreground max-w-[240px]">{description}</p>
+      </div>
+    </div>
+  );
+}
+function MetricCard({ label, value, subValue, icon, color = 'default', barPercent }) {
+  const colorMap = { default: 'bg-primary', success: 'bg-success', warning: 'bg-warning', destructive: 'bg-destructive' };
+  return (
+    <div className="bg-surface rounded-lg border border-border p-4 space-y-3 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <div className="text-muted-foreground">{icon}</div>
+      </div>
+      <div>
+        <div className="text-2xl font-semibold text-foreground">{value}</div>
+        {subValue && <div className="text-xs text-muted-foreground mt-0.5">{subValue}</div>}
+      </div>
+      {barPercent !== undefined && (
+        <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
+          <div className={`h-full rounded-full transition-all duration-700 ${colorMap[color]}`} style={{ width: `${Math.min(100, Math.max(0, barPercent))}%` }}/>
+        </div>
+      )}
+    </div>
+  );
+}
+function ProcessorRow({ step, index }) {
+  const [expanded, setExpanded] = useState(false);
+  const borderColors = { improvement: 'border-l-success', neutral: 'border-l-warning', destructive: 'border-l-destructive' };
+  const badgeColors = { improvement: 'bg-green-900/30 text-success', neutral: 'bg-yellow-900/30 text-warning', destructive: 'bg-red-900/30 text-destructive' };
+  return (
+    <div className={`border-l-2 bg-surface rounded-md border border-border animate-fade-in ${borderColors[step.effect]}`} style={{ animationDelay: `${index * 50}ms` }}>
+      <button type="button" onClick={() => setExpanded(!expanded)} className="flex w-full items-center gap-3 px-3 py-2.5 text-left">
+        <span className="text-xs font-medium text-foreground flex-1">{step.name}</span>
+        <span className="text-[10px] font-mono text-muted-foreground">{step.duration_ms}ms</span>
+        {step.notes_removed > 0 && <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-muted-foreground">-{step.notes_removed}</span>}
+        <span className={`text-[10px] px-1.5 py-0.5 rounded ${badgeColors[step.effect]}`}>{step.effect}</span>
+        <span style={{ transform: expanded ? 'rotate(180deg)' : '', transition: 'transform 0.2s', display: 'inline-block' }}><Icons.ChevronDown size={12}/></span>
+      </button>
+      {expanded && <div className="px-3 pb-2.5 text-xs text-muted-foreground border-t border-border pt-2">{step.details}</div>}
+    </div>
+  );
+}
+function midiNoteToName(note) {
+  const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  return `${names[note % 12]}${Math.floor(note / 12) - 1}`;
+}
+function MetricsCharts({ result }) {
+  const COLORS = { primary: 'hsl(239,84%,67%)', success: 'hsl(142,71%,45%)', muted: 'hsl(240,5%,20%)', warning: 'hsl(38,92%,50%)' };
+  const totalRemoved = result.report.steps.reduce((a, s) => a + s.notes_removed, 0);
+  const track = result.tracks.find(t => t.note_count > 0);
+  const notesBefore = track ? track.note_count + totalRemoved : 1000;
+  const notesAfter = track ? track.note_count : notesBefore - totalRemoved;
+  const removedPercent = Math.round((totalRemoved / notesBefore) * 100);
+  const noteRange = track?.note_range || [40, 84];
+  const polyphonyData = [{ name: 'Before', value: notesBefore }, { name: 'After', value: notesAfter }];
+  const donutData = [{ name: 'Removed', value: totalRemoved }, { name: 'Kept', value: notesAfter }];
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="bg-surface rounded-lg border border-border p-4">
+        <h4 className="text-xs font-medium text-muted-foreground mb-3">Note Count (Before vs After)</h4>
+        <ResponsiveContainer width="100%" height={120}>
+          <BarChart data={polyphonyData} layout="vertical" barGap={4}>
+            <XAxis type="number" hide/>
+            <YAxis type="category" dataKey="name" width={50} tick={{ fontSize: 11, fill: 'hsl(240,5%,50%)' }} axisLine={false} tickLine={false}/>
+            <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
+              <Cell fill={COLORS.muted}/><Cell fill={COLORS.primary}/>
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="bg-surface rounded-lg border border-border p-4">
+        <h4 className="text-xs font-medium text-muted-foreground mb-3">Notes Removed</h4>
+        <div className="flex items-center gap-6">
+          <ResponsiveContainer width={100} height={100}>
+            <PieChart><Pie data={donutData} innerRadius={30} outerRadius={45} dataKey="value" startAngle={90} endAngle={-270}>
+              <Cell fill={COLORS.warning}/><Cell fill={COLORS.muted}/>
+            </Pie></PieChart>
+          </ResponsiveContainer>
+          <div>
+            <div className="text-2xl font-semibold text-foreground">{removedPercent}%</div>
+            <div className="text-xs text-muted-foreground">{totalRemoved} of {notesBefore} notes</div>
+          </div>
+        </div>
+      </div>
+      <div className="bg-surface rounded-lg border border-border p-4">
+        <h4 className="text-xs font-medium text-muted-foreground mb-3">Pitch Range</h4>
+        <div className="flex items-center justify-between">
+          <div className="text-center">
+            <div className="text-lg font-semibold text-foreground">{midiNoteToName(noteRange[0])}</div>
+            <div className="text-[10px] text-muted-foreground">MIDI {noteRange[0]}</div>
+          </div>
+          <div className="flex-1 mx-4 h-2 rounded-full bg-surface-2 relative overflow-hidden">
+            <div className="absolute h-full rounded-full bg-gradient-to-r from-primary to-success"
+              style={{ left: `${(noteRange[0]/127)*100}%`, right: `${100-(noteRange[1]/127)*100}%` }}/>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-semibold text-foreground">{midiNoteToName(noteRange[1])}</div>
+            <div className="text-[10px] text-muted-foreground">MIDI {noteRange[1]}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function flattenConfig(config) {
+  const flat = {};
+  for (const [key, value] of Object.entries(config)) {
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+      for (const [subKey, subVal] of Object.entries(value)) flat[`${key}.${subKey}`] = String(subVal);
+    } else if (Array.isArray(value)) flat[key] = value.join(', ');
+    else flat[key] = String(value);
+  }
+  return flat;
+}
+function ComparisonTable({ before, after }) {
+  const flatBefore = flattenConfig(before), flatAfter = flattenConfig(after);
+  const allKeys = [...new Set([...Object.keys(flatBefore), ...Object.keys(flatAfter)])];
+  return (
+    <div className="rounded-lg border border-border overflow-hidden animate-fade-in">
+      <table className="w-full text-xs">
+        <thead><tr className="bg-surface-2">
+          <th className="text-left px-3 py-2 text-muted-foreground font-medium">Parameter</th>
+          <th className="text-left px-3 py-2 text-muted-foreground font-medium">Before</th>
+          <th className="text-left px-3 py-2 text-muted-foreground font-medium">After</th>
+        </tr></thead>
+        <tbody>{allKeys.map(key => {
+          const changed = flatBefore[key] !== flatAfter[key];
+          return (
+            <tr key={key} className="border-t border-border">
+              <td className="px-3 py-1.5 font-mono text-muted-foreground">{key}</td>
+              <td className="px-3 py-1.5">{flatBefore[key] ?? '—'}</td>
+              <td className={`px-3 py-1.5 ${changed ? 'text-primary font-medium' : ''}`}>{flatAfter[key] ?? '—'}</td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+    </div>
+  );
+}
+function LlmDecisionCard({ decision }) {
+  return (
+    <div className="bg-surface rounded-md border border-border p-3 space-y-1.5 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-foreground">{decision.suggestion}</span>
+        <span className={`text-[10px] px-1.5 py-0.5 rounded ${decision.applied ? 'bg-green-900/30 text-success' : 'bg-surface-2 text-muted-foreground'}`}>
+          {decision.applied ? 'Applied' : 'Skipped'}
+        </span>
+      </div>
+      <p className="text-[11px] text-muted-foreground">{decision.reason}</p>
+    </div>
+  );
+}
+function OptimizePanel({ status, isOptimizing, onApply, onDismiss }) {
+  const progress = status ? (status.current_trial / status.total_trials) * 100 : 0;
+  const isDone = status?.status === 'done';
+  return (
+    <div className="bg-surface border-b border-border px-6 py-4 animate-fade-in">
+      <div className="max-w-4xl mx-auto space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Icons.Sparkles size={16} className="text-primary"/>
+            <h3 className="text-sm font-semibold text-foreground">{isDone ? 'Optimization Complete' : 'Auto Optimization'}</h3>
+            {isDone && <Icons.Check size={16} className="text-success"/>}
+          </div>
+          <button onClick={onDismiss} className="p-1 text-muted-foreground hover:text-foreground rounded"><Icons.X size={16}/></button>
+        </div>
+        {isOptimizing && status && <>
+          <div className="h-1.5 rounded-full bg-surface-2 overflow-hidden">
+            <div className="h-full rounded-full bg-primary transition-all duration-300" style={{ width: `${progress}%` }}/>
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>Trial {status.current_trial} of {status.total_trials}</span>
+            {status.best_score !== null && <span>Best score: <span className="text-foreground font-medium">{status.best_score.toFixed(2)}</span></span>}
+          </div>
+          {status.current_params && Object.keys(status.current_params).length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(status.current_params).map(([k, v]) => (
+                <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-surface-2 text-muted-foreground">{k}: {String(v)}</span>
+              ))}
+            </div>
+          )}
+        </>}
+        {isDone && status && <div className="space-y-3">
+          <div className="flex items-center gap-6 text-sm">
+            <div><span className="text-muted-foreground">Score: </span><span className="text-foreground font-semibold">{status.best_score?.toFixed(2)}</span></div>
+          </div>
+          {status.llm_decisions?.length > 0 && <div className="space-y-2">
+            <h4 className="text-xs font-medium text-muted-foreground">AI Decisions</h4>
+            {status.llm_decisions.map((d, i) => <LlmDecisionCard key={i} decision={d}/>)}
+          </div>}
+          <button onClick={onApply} className="px-4 py-2 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition">Apply These Settings</button>
+        </div>}
+      </div>
+    </div>
+  );
+}
+// ─── Header ──────────────────────────────────────
+function Header({ presets, selectedPreset, onSelectPreset, onUpload, isUploading, showAdvanced, onToggleAdvanced, onOptimize, hasFile }) {
+  const fileRef = useRef(null);
+  return (
+    <header className="h-14 border-b border-border bg-surface flex items-center px-4 gap-4 shrink-0">
+      <div className="flex items-center gap-2 min-w-[180px]">
+        <Icons.Music size={20} className="text-primary"/>
+        <span className="text-sm font-semibold text-foreground tracking-tight">MIDI Obfuscator</span>
+      </div>
+      <div className="flex-1 flex justify-center">
+        <select value={selectedPreset} onChange={e => onSelectPreset(e.target.value)} disabled={!hasFile}
+          className="w-[280px] h-8 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground disabled:opacity-50 outline-none">
+          <option value="">Select a preset…</option>
+          {presets.map(p => <option key={p.id} value={p.id}>{p.name} — {p.description}</option>)}
+        </select>
+      </div>
+      <div className="flex items-center gap-3 min-w-[360px] justify-end">
+        <input ref={fileRef} type="file" accept=".mid,.midi" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}/>
+        <button onClick={() => fileRef.current?.click()} disabled={isUploading}
+          className="flex items-center gap-1.5 px-3 h-8 text-xs rounded-md border border-border bg-surface-2 hover:bg-muted text-foreground transition disabled:opacity-50">
+          {isUploading ? <Icons.Loader size={14}/> : <Icons.Upload size={14}/>}
+          Load MIDI
+        </button>
+        <button onClick={onOptimize} disabled={!hasFile}
+          className="flex items-center gap-1.5 px-3 h-8 text-xs rounded-md border border-border bg-surface-2 hover:bg-muted text-foreground transition disabled:opacity-50">
+          <Icons.Sparkles size={14}/>
+          Auto Optimize
+          <InfoTooltip text={TOOLTIPS.auto_optimize}/>
+        </button>
+        <div className="flex items-center gap-2 pl-2 border-l border-border">
+          <Icons.Settings size={14} className="text-muted-foreground"/>
+          <span className="text-xs text-muted-foreground">Advanced</span>
+          <Toggle checked={showAdvanced} onChange={onToggleAdvanced}/>
+        </div>
+      </div>
+    </header>
+  );
+}
+// ─── Left Panel ──────────────────────────────────
+function LeftPanel({ config, updateConfig, updateNestedConfig, uploadData, showAdvanced, isProcessing, onProcess }) {
+  const disabled = !uploadData;
+  if (!uploadData) return (
+    <div className="w-[280px] shrink-0 border-r border-border bg-surface flex flex-col">
+      <EmptyState title="No file loaded" description="Upload a MIDI file to begin."/>
+    </div>
+  );
+  return (
+    <div className="w-[280px] shrink-0 border-r border-border bg-surface flex flex-col overflow-hidden">
+      <div className="px-4 py-3 border-b border-border">
+        <div className="text-xs font-medium text-foreground truncate">{uploadData.filename}</div>
+        <div className="text-[10px] text-muted-foreground mt-0.5">{uploadData.num_tracks} tracks · {uploadData.ticks_per_beat} TPB · Type {uploadData.type}</div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        <Panel title="Cleaning">
+          <ToggleRow label="Deduplicate Tempo" checked={config.tempo_deduplicator.enabled} onChange={v => updateNestedConfig('tempo_deduplicator', { enabled: v })} tooltip={TOOLTIPS.tempo_deduplicator} disabled={disabled}/>
+          <ToggleRow label="Merge Voices" checked={config.merge_voices} onChange={v => updateConfig({ merge_voices: v })} tooltip={TOOLTIPS.merge_voices} disabled={disabled}/>
+          <ToggleRow label="Remove Overlaps" checked={config.remove_overlaps} onChange={v => updateConfig({ remove_overlaps: v })} tooltip={TOOLTIPS.remove_overlaps} disabled={disabled}/>
+          <ToggleRow label="Same-pitch Resolver" checked={config.same_pitch_overlap_resolver.enabled} onChange={v => updateNestedConfig('same_pitch_overlap_resolver', { enabled: v })} tooltip={TOOLTIPS.same_pitch_overlap_resolver} disabled={disabled}/>
+          <ToggleRow label="Noise Filter" checked={config.filter_noise} onChange={v => updateConfig({ filter_noise: v })} tooltip={TOOLTIPS.filter_noise} disabled={disabled}/>
+          {config.filter_noise && <>
+            <SliderRow label="Min Duration" value={config.min_duration_ticks} onChange={v => updateConfig({ min_duration_ticks: v })} min={30} max={480} step={10} tooltip={TOOLTIPS.min_duration_ticks} disabled={disabled} format={v => `${v} ticks`}/>
+            <SliderRow label="Min Velocity" value={config.min_velocity} onChange={v => updateConfig({ min_velocity: v })} min={0} max={127} step={1} tooltip={TOOLTIPS.min_velocity} disabled={disabled}/>
+          </>}
+        </Panel>
+        <Panel title="Rhythm">
+          <ToggleRow label="Remove Triplets" checked={config.remove_triplets} onChange={v => updateConfig({ remove_triplets: v })} tooltip={TOOLTIPS.remove_triplets} disabled={disabled}/>
+          <ToggleRow label="Quantize" checked={config.quantize} onChange={v => updateConfig({ quantize: v })} tooltip={TOOLTIPS.quantize} disabled={disabled}/>
+          {config.quantize && <SelectRow label="Grid" value={config.quantize_grid} options={[{value:'quarter',label:'¼'},{value:'eighth',label:'⅛'},{value:'sixteenth',label:'1/16'}]} onChange={v => updateConfig({ quantize_grid: v })} tooltip={TOOLTIPS.quantize_grid} disabled={disabled}/>}
+        </Panel>
+        {showAdvanced && <Panel title="Advanced" defaultOpen={true}>
+          <SliderRow label="Triplet Tolerance" value={config.triplet_tolerance} onChange={v => updateConfig({ triplet_tolerance: v })} min={0.05} max={0.30} step={0.01} tooltip={TOOLTIPS.triplet_tolerance} disabled={disabled} format={v => v.toFixed(2)}/>
+          <ToggleRow label="Remove CC Messages" checked={config.remove_cc} onChange={v => updateConfig({ remove_cc: v })} tooltip={TOOLTIPS.remove_cc} disabled={disabled}/>
+          {config.remove_cc && <div className="pl-1 space-y-1">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={config.cc_numbers.includes(64)} onChange={e => updateConfig({ cc_numbers: e.target.checked ? [...config.cc_numbers, 64] : config.cc_numbers.filter(n => n !== 64) })} className="accent-primary"/>
+              CC#64 Sustain
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={config.cc_numbers.includes(68)} onChange={e => updateConfig({ cc_numbers: e.target.checked ? [...config.cc_numbers, 68] : config.cc_numbers.filter(n => n !== 68) })} className="accent-primary"/>
+              CC#68 Legato
+            </label>
+          </div>}
+          <ToggleRow label="Pitch Cluster" checked={config.pitch_cluster.enabled} onChange={v => updateNestedConfig('pitch_cluster', { enabled: v })} tooltip={TOOLTIPS.pitch_cluster} disabled={disabled}/>
+          {config.pitch_cluster.enabled && <>
+            <SliderRow label="Time Window" value={config.pitch_cluster.time_window_ticks} onChange={v => updateNestedConfig('pitch_cluster', { time_window_ticks: v })} min={5} max={100} step={1} tooltip={TOOLTIPS.time_window_ticks} disabled={disabled} format={v => `${v} ticks`}/>
+            <SliderRow label="Pitch Threshold" value={config.pitch_cluster.pitch_threshold} onChange={v => updateNestedConfig('pitch_cluster', { pitch_threshold: v })} min={0} max={3} step={1} tooltip={TOOLTIPS.pitch_threshold} disabled={disabled} format={v => `${v} st`}/>
+          </>}
+          <div className="py-1.5 space-y-1.5">
+            <span className="text-xs text-foreground">Start from Bar</span>
+            <input type="number" value={config.start_bar} onChange={e => updateConfig({ start_bar: Math.max(1, parseInt(e.target.value) || 1) })} min={1} max={999} disabled={disabled}
+              className="w-full h-7 text-xs bg-surface-2 border border-border rounded-md px-2 text-foreground outline-none"/>
+          </div>
+          <ToggleRow label="Merge All Tracks" checked={config.merge_tracks.enabled} onChange={v => updateNestedConfig('merge_tracks', { enabled: v })} tooltip={TOOLTIPS.merge_tracks} disabled={disabled}/>
+          <ToggleRow label="LLM Guidance" checked={config.llm.enabled} onChange={v => updateNestedConfig('llm', { enabled: v })} tooltip={TOOLTIPS.llm} disabled={disabled}/>
+          {config.llm.enabled && <>
+            <div className="py-1.5 space-y-1.5">
+              <span className="text-xs text-foreground">Model</span>
+              <input value={config.llm.model} onChange={e => updateNestedConfig('llm', { model: e.target.value })} disabled={disabled}
+                className="w-full h-7 text-xs font-mono bg-surface-2 border border-border rounded-md px-2 text-foreground outline-none"/>
+            </div>
+            <SliderRow label="Max Calls" value={config.llm.max_calls} onChange={v => updateNestedConfig('llm', { max_calls: v })} min={1} max={10} step={1} disabled={disabled}/>
+          </>}
+        </Panel>}
+      </div>
+      <div className="p-4 border-t border-border">
+        <button onClick={onProcess} disabled={disabled || isProcessing}
+          className="w-full h-9 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:opacity-90 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+          {isProcessing ? <><Icons.Loader size={14}/> Processing…</> : 'Process & Clean'}
+        </button>
+      </div>
+    </div>
+  );
+}
+// ─── Center Panel ────────────────────────────────
+function CenterPanel({ result, config }) {
+  const [tab, setTab] = useState('overview');
+  if (!result) return (
+    <div className="flex-1 bg-background flex items-center justify-center">
+      <EmptyState title="Ready to process" description="Load a MIDI file and click Process to begin."/>
+    </div>
+  );
+  const totalRemoved = result.report.steps.reduce((a, s) => a + s.notes_removed, 0);
+  const track = result.tracks.find(t => t.note_count > 0);
+  const notesBefore = track ? track.note_count + totalRemoved : 1000;
+  const notesAfter = track ? track.note_count : notesBefore - totalRemoved;
+  const improvementPct = Math.round(((notesBefore - notesAfter) / notesBefore) * 100);
+  const overlapsRemoved = result.report.steps.find(s => s.name.toLowerCase().includes('overlap'))?.notes_removed || 0;
+  const cleanlinessScore = (1 - totalRemoved / notesBefore) * 100;
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: <Icons.FileMusic size={14}/> },
+    { id: 'log', label: 'Processing Log', icon: <Icons.List size={14}/> },
+    { id: 'metrics', label: 'Metrics', icon: <Icons.BarChart size={14}/> },
+    { id: 'comparison', label: 'Comparison', icon: <Icons.GitCompare size={14}/> },
+  ];
+  return (
+    <div className="flex-1 bg-background overflow-y-auto flex flex-col">
+      <div className="border-b border-border px-6 pt-4">
+        <div className="flex bg-surface-2 rounded-md h-8 p-0.5 w-fit">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1.5 text-xs h-7 px-3 rounded-sm transition ${tab === t.id ? 'bg-surface text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+              {t.icon} {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-6">
+        {tab === 'overview' && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <MetricCard label="Notes" value={`${notesBefore} → ${notesAfter}`} icon={<Icons.FileMusic size={16}/>} color="success" barPercent={(notesAfter/notesBefore)*100}/>
+            <MetricCard label="Overlaps Removed" value={overlapsRemoved} icon={<Icons.GitCompare size={16}/>} color={overlapsRemoved > 50 ? 'warning' : 'success'} barPercent={Math.min(100, overlapsRemoved)}/>
+            <MetricCard label="Cleanliness" value={`${cleanlinessScore.toFixed(0)}%`} icon={<Icons.BarChart size={16}/>} color={cleanlinessScore > 80 ? 'success' : 'warning'} barPercent={cleanlinessScore}/>
+            <MetricCard label="Improvement" value={`${improvementPct}%`} subValue={`${totalRemoved} notes cleaned`} icon={<Icons.BarChart size={16}/>} color={improvementPct > 10 ? 'success' : 'default'} barPercent={improvementPct}/>
+          </div>
+        )}
+        {tab === 'log' && <div className="space-y-2">{result.report.steps.map((step, i) => <ProcessorRow key={i} step={step} index={i}/>)}</div>}
+        {tab === 'metrics' && <MetricsCharts result={result}/>}
+        {tab === 'comparison' && <ComparisonTable before={DEFAULT_CONFIG} after={config}/>}
+      </div>
+    </div>
+  );
+}
+// ─── Right Panel ─────────────────────────────────
+function RightPanel({ result, config, toast }) {
+  const [showConfig, setShowConfig] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [downloading, setDownloading] = useState(null);
+  if (!result) return (
+    <div className="w-[260px] shrink-0 border-l border-border bg-surface flex flex-col">
+      <EmptyState title="No results yet" description="Process a MIDI file to see download options."/>
+    </div>
+  );
+  const handleDownloadMidi = async () => {
+    setDownloading('midi');
+    try { const blob = await downloadMidi(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'cleaned.mid'; a.click(); URL.revokeObjectURL(url); }
+    catch { toast({ title: 'Download failed', variant: 'destructive' }); }
+    finally { setDownloading(null); }
+  };
+  const handleDownloadReport = async () => {
+    setDownloading('report');
+    try { const blob = await downloadReport(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'report.json'; a.click(); URL.revokeObjectURL(url); }
+    catch { toast({ title: 'Download failed', variant: 'destructive' }); }
+    finally { setDownloading(null); }
+  };
+  const handleCopy = async () => {
+    try { await navigator.clipboard.writeText(JSON.stringify(config, null, 2)); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { toast({ title: 'Copy failed', variant: 'destructive' }); }
+  };
+  return (
+    <div className="w-[260px] shrink-0 border-l border-border bg-surface flex flex-col overflow-hidden">
+      <div className="p-4 space-y-2 border-b border-border">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Export</h3>
+        <button onClick={handleDownloadMidi} disabled={downloading === 'midi'} className="w-full h-9 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:opacity-90 transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+          <Icons.Download size={14}/> Download Clean MIDI
+        </button>
+        <button onClick={handleDownloadReport} disabled={downloading === 'report'} className="w-full h-8 text-xs rounded-md border border-border bg-surface-2 hover:bg-muted text-foreground transition flex items-center justify-center gap-1.5 disabled:opacity-50">
+          <Icons.Download size={14}/> Download Report JSON
+        </button>
+        <button onClick={handleCopy} className="w-full h-8 text-xs rounded-md border border-border bg-surface-2 hover:bg-muted text-foreground transition flex items-center justify-center gap-1.5">
+          {copied ? <><Icons.Check size={14} className="text-success"/> Copied!</> : <><Icons.Copy size={14}/> Copy Parameters</>}
+        </button>
+      </div>
+      <div className="p-4">
+        <button type="button" onClick={() => setShowConfig(!showConfig)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <Icons.Code size={14}/> {showConfig ? 'Hide' : 'Show'} Raw Config
+        </button>
+        {showConfig && <pre className="mt-3 p-3 rounded-md bg-background border border-border text-[10px] font-mono text-muted-foreground overflow-auto max-h-[400px] leading-relaxed animate-fade-in">{JSON.stringify(config, null, 2)}</pre>}
+      </div>
+    </div>
+  );
+}
+// ─── App ─────────────────────────────────────────
+function App() {
+  return (
+    <ToastProvider>{(toast) => <AppInner toast={toast}/>}</ToastProvider>
+  );
+}
+function AppInner({ toast }) {
+  const [config, setConfig] = useState({ ...DEFAULT_CONFIG });
+  const [uploadData, setUploadData] = useState(null);
+  const [processResult, setProcessResult] = useState(null);
+  const [presets, setPresets] = useState([]);
+  const [selectedPreset, setSelectedPreset] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Optimize state
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [showOptimize, setShowOptimize] = useState(false);
+  const [optStatus, setOptStatus] = useState(null);
+  const pollRef = useRef(null);
+  const updateConfig = useCallback((patch) => setConfig(prev => ({ ...prev, ...patch })), []);
+  const updateNestedConfig = useCallback((key, patch) => setConfig(prev => ({
+    ...prev, [key]: typeof prev[key] === 'object' ? { ...prev[key], ...patch } : patch,
+  })), []);
+  useEffect(() => { fetchPresets().then(setPresets).catch(() => toast({ title: 'Failed to load presets', variant: 'destructive' })); }, []);
+  const selectPreset = useCallback(async (id) => {
+    setSelectedPreset(id);
+    try { const pc = await fetchPresetConfig(id); setConfig(prev => ({ ...prev, ...pc })); }
+    catch { toast({ title: 'Failed to load preset', variant: 'destructive' }); }
+  }, [toast]);
+  const handleUpload = useCallback(async (file) => {
+    setIsUploading(true);
+    try {
+      const data = await uploadFile(file);
+      setUploadData(data); setProcessResult(null);
+      try { const s = await suggestPreset(); setSelectedPreset(s.preset_id); setConfig(prev => ({ ...prev, ...s.config })); } catch {}
+      toast({ title: 'File loaded', description: `${data.filename} — ${data.num_tracks} tracks, ${data.ticks_per_beat} TPB` });
+    } catch { toast({ title: 'Upload failed', variant: 'destructive' }); }
+    finally { setIsUploading(false); }
+  }, [toast]);
+  const handleProcess = useCallback(async () => {
+    setIsProcessing(true);
+    try {
+      const result = await processFile(config);
+      setProcessResult(result);
+      toast({ title: 'Processing complete', description: `${result.report.steps.reduce((a, s) => a + s.notes_removed, 0)} notes cleaned` });
+    } catch { toast({ title: 'Processing failed', variant: 'destructive' }); }
+    finally { setIsProcessing(false); }
+  }, [config, toast]);
+  const handleStartOptimize = useCallback(async () => {
+    setShowOptimize(true); setIsOptimizing(true); setOptStatus(null);
+    try {
+      await startOptimize();
+      pollRef.current = setInterval(async () => {
+        try {
+          const s = await fetchOptimizeStatus();
+          setOptStatus(s);
+          if (s.status === 'done' || s.status === 'error') {
+            clearInterval(pollRef.current); pollRef.current = null; setIsOptimizing(false);
+            if (s.status === 'error') toast({ title: 'Optimization error', description: s.error, variant: 'destructive' });
+          }
+        } catch { clearInterval(pollRef.current); pollRef.current = null; setIsOptimizing(false); toast({ title: 'Polling error', variant: 'destructive' }); }
+      }, 1500);
+    } catch { setIsOptimizing(false); toast({ title: 'Failed to start optimization', variant: 'destructive' }); }
+  }, [toast]);
+  const handleApplyOptimize = useCallback(async () => {
+    try {
+      const result = await applyOptimize();
+      toast({ title: 'Settings applied', description: `Best score: ${result.best_score.toFixed(2)}` });
+      setShowOptimize(false);
+      if (result.best_params) updateConfig(result.best_params);
+    } catch { toast({ title: 'Apply failed', variant: 'destructive' }); }
+  }, [toast, updateConfig]);
+  const handleDismissOptimize = useCallback(() => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setIsOptimizing(false); setShowOptimize(false); setOptStatus(null);
+  }, []);
+  const [isDragging, setIsDragging] = useState(false);
+  const handleDragOver = useCallback((e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }, []);
+  const handleDragLeave = useCallback((e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }, []);
+  const handleDrop = useCallback((e) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file && (file.name.endsWith('.mid') || file.name.endsWith('.midi'))) {
+      handleUpload(file);
+    } else if (file) {
+      toast({ title: 'Wrong file type', description: 'Please drop a .mid or .midi file', variant: 'destructive' });
+    }
+  }, [handleUpload, toast]);
+  return (
+    <div className="h-screen flex flex-col bg-background overflow-hidden relative"
+      onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none"
+          style={{background:'rgba(99,102,241,0.12)', border:'2px dashed #6366f1', borderRadius:'12px'}}>
+          <div className="text-center">
+            <div style={{fontSize:'48px'}}>🎵</div>
+            <div className="text-lg font-semibold text-primary mt-2">Drop MIDI file here</div>
+          </div>
+        </div>
+      )}
+      <Header presets={presets} selectedPreset={selectedPreset} onSelectPreset={selectPreset}
+        onUpload={handleUpload} isUploading={isUploading} showAdvanced={showAdvanced} onToggleAdvanced={setShowAdvanced}
+        onOptimize={handleStartOptimize} hasFile={!!uploadData}/>
+      {showOptimize && <OptimizePanel status={optStatus} isOptimizing={isOptimizing} onApply={handleApplyOptimize} onDismiss={handleDismissOptimize}/>}
+      <div className="flex flex-1 overflow-hidden">
+        <LeftPanel config={config} updateConfig={updateConfig} updateNestedConfig={updateNestedConfig}
+          uploadData={uploadData} showAdvanced={showAdvanced} isProcessing={isProcessing} onProcess={handleProcess}/>
+        <CenterPanel result={processResult} config={config}/>
+        <RightPanel result={processResult} config={config} toast={toast}/>
+      </div>
+    </div>
+  );
+}
+// ─── Render ──────────────────────────────────────
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
+

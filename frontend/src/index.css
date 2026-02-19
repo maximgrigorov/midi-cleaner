@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(0 0% 9%);
+  --color-foreground: hsl(0 0% 98%);
+  --color-card: hsl(0 0% 14%);
+  --color-card-foreground: hsl(0 0% 98%);
+  --color-primary: hsl(234 89% 73%);
+  --color-primary-foreground: hsl(243 47% 20%);
+  --color-secondary: hsl(0 0% 45%);
+  --color-secondary-foreground: hsl(0 0% 98%);
+  --color-muted: hsl(0 0% 45%);
+  --color-muted-foreground: hsl(0 0% 70%);
+  --color-accent: hsl(261 72% 22%);
+  --color-accent-foreground: hsl(255 91% 76%);
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 85% 97%);
+  --color-success: hsl(142 71% 45%);
+  --color-success-foreground: hsl(0 0% 100%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-foreground: hsl(0 0% 0%);
+  --color-border: hsl(0 0% 32%);
+  --color-input: hsl(0 0% 32%);
+  --color-ring: hsl(234 89% 73%);
+  --color-surface: hsl(240 10% 10.5%);
+  --color-surface-2: hsl(240 10% 14%);
+
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--color-border);
+}
+
+html {
+  font-size: 14px;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(240 5% 20%);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(240 5% 30%);
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-surface-2);
+  outline: none;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+}
+input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  cursor: pointer;
+  border: 0;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.toggle-switch.on {
+  background: var(--color-primary);
+}
+.toggle-switch.off {
+  background: var(--color-surface-2);
+}
+.toggle-switch .knob {
+  position: absolute;
+  top: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: white;
+  transition: left 0.15s;
+}
+.toggle-switch.on .knob {
+  left: 18px;
+}
+.toggle-switch.off .knob {
+  left: 2px;
+}
+
+.tip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.tip-wrap .tip-text {
+  visibility: hidden;
+  opacity: 0;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  color: var(--color-foreground);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  max-width: 280px;
+  width: max-content;
+  z-index: 50;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.tip-wrap:hover .tip-text {
+  visibility: visible;
+  opacity: 1;
+}
+
+.toast-container {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast-item {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 12px;
+  color: var(--color-foreground);
+  animation: slideIn 0.3s ease;
+  min-width: 250px;
+}
+.toast-item.destructive {
+  border-color: var(--color-destructive);
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
