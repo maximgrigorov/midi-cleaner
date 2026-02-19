@@ -52,30 +52,18 @@ test:
 
 # ── Remote deploy to alma ──────────────────────────────────────────
 deploy:
-	@echo "==> Building frontend..."
-	cd frontend && npm run build
-
 	@echo "==> Syncing project to $(DEPLOY_HOST):$(DEPLOY_DIR)..."
 	$(SSH) "mkdir -p $(DEPLOY_DIR)"
 	rsync -avz --delete \
 		--exclude '__pycache__' \
 		--exclude '*.pyc' \
-		--exclude 'uploads/' \
 		--exclude '.git' \
-		--exclude 'node_modules' \
 		--exclude '.DS_Store' \
 		--exclude '.pytest_cache' \
+		--exclude 'node_modules' \
+		--exclude 'frontend/dist' \
+		--exclude 'uploads/' \
 		--exclude 'standalone.html' \
-		--exclude 'frontend/src' \
-		--exclude 'frontend/node_modules' \
-		--exclude 'frontend/public' \
-		--exclude 'frontend/.gitignore' \
-		--exclude 'frontend/README.md' \
-		--exclude 'frontend/eslint.config.js' \
-		--exclude 'frontend/tsconfig*.json' \
-		--exclude 'frontend/vite.config.ts' \
-		--exclude 'frontend/package*.json' \
-		--exclude 'backend/tests' \
 		--exclude 'backend/static' \
 		--exclude 'backend/templates' \
 		./ $(DEPLOY_USER)@$(DEPLOY_HOST):$(DEPLOY_DIR)/
@@ -87,7 +75,7 @@ deploy:
 		podman-compose up -d"
 
 	@echo ""
-	@echo "✓ Deployed! MIDI Obfuscator running at http://$(DEPLOY_HOST):8080"
+	@echo "✓ Deployed! MIDI Cleaner running at http://$(DEPLOY_HOST):8080"
 	@echo "  Containers run as $(DEPLOY_USER) (rootless podman)."
 
 # ── Cleanup ────────────────────────────────────────────────────────
