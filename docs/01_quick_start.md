@@ -31,12 +31,14 @@ You can also download this data as `report.json` for your records.
 If you want the tool to find optimal settings automatically:
 
 1. Upload your MIDI file
-2. Open the "Auto Optimize" panel
+2. Switch to the **"Auto-Tune"** tab
 3. Set the number of trials (30–40 is usually enough)
-4. Click "Start Optimization"
-5. Wait for it to finish (it tests many parameter combinations)
-6. Click "Apply Best Parameters" to use the winning settings
-7. Download the result
+4. Optionally enable **LLM Guidance** for AI-assisted parameter suggestions
+5. Click **"Start Optimization"**
+6. Wait for it to finish (it tests many parameter combinations)
+7. Click **"Apply Best Parameters"** — this updates all settings to the optimal values and switches to Manual mode so you can review them
+8. Click **"Process & Clean"** to generate the output with those settings
+9. **Download** the result
 
 ## Tips
 

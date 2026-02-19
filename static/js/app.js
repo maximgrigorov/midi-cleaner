@@ -41,7 +41,7 @@ const I18N = {
         opt_track_type: 'Track Type', opt_status_label: 'Status', opt_running: 'Running...',
         opt_current_params: 'Current Best Parameters', opt_apply: 'Apply Best Parameters',
         opt_done: 'Done', opt_stopped: 'Stopped', opt_error: 'Error',
-        opt_applied: 'Optimized parameters applied! Click Download.',
+        opt_applied: 'Optimized parameters applied to settings. Click "Process & Clean" to generate the result.',
         mode_preset: 'Preset', mode_auto: 'Auto-Tune', mode_manual: 'Manual',
         preset_label: 'Preset', preset_auto: 'Auto (Recommended)',
         lock_advanced: 'Show Advanced',
@@ -93,7 +93,7 @@ const I18N = {
         opt_track_type: 'Тип дорожки', opt_status_label: 'Статус', opt_running: 'Выполняется...',
         opt_current_params: 'Лучшие параметры', opt_apply: 'Применить лучшие параметры',
         opt_done: 'Готово', opt_stopped: 'Остановлено', opt_error: 'Ошибка',
-        opt_applied: 'Оптимизированные параметры применены! Нажмите Скачать.',
+        opt_applied: 'Оптимизированные параметры применены. Нажмите «Обработать» для результата.',
         mode_preset: 'Пресет', mode_auto: 'Авто-тюнинг', mode_manual: 'Вручную',
         preset_label: 'Пресет', preset_auto: 'Авто (рекомендуемый)',
         lock_advanced: 'Показать расширенные',
@@ -517,28 +517,10 @@ async function applyOptimized() {
         const data = await resp.json();
         if (!resp.ok) { toast(data.error || t('process_fail'), 'error'); return; }
 
-        state.processed = true;
-        state.notationCache = {};
-        state.playbackCache = {};
-        state.fullPlayerData = null;
-        $('#btn-download').style.display = 'inline-flex';
-        $('#player-src-processed').disabled = false;
-
-        // Apply the best params to the UI config fields
+        // Apply the best params to the UI config fields — switch to Manual mode so user sees them
         if (data.best_params) applyOptimizerParamsToUI(data.best_params);
+        switchMode('manual');
 
-        if (state.fileInfo && data.tracks) {
-            state.fileInfo.tracks.forEach((orig, i) => {
-                const pt = data.tracks[i];
-                if (pt) {
-                    orig.note_count = pt.note_count;
-                    orig.channels_used = pt.channels_used;
-                    orig.note_range = pt.note_range;
-                }
-            });
-        }
-        showTracks(state.fileInfo.tracks);
-        $$('.comparison-tabs').forEach(el => el.style.display = 'flex');
         toast(t('opt_applied'), 'success');
     } catch (err) {
         toast(t('process_fail') + ': ' + err.message, 'error');

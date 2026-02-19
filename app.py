@@ -83,22 +83,126 @@ def index():
 @app.route('/docs/')
 @app.route('/docs/<path:filename>')
 def serve_docs(filename='README.md'):
-    """Serve documentation markdown files."""
+    """Serve documentation markdown files rendered as HTML."""
+    import markdown as _md
+
     docs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs')
-    filepath = os.path.join(docs_dir, filename)
-    if not os.path.exists(filepath) or not filepath.startswith(docs_dir):
+    filepath = os.path.realpath(os.path.join(docs_dir, filename))
+    if not filepath.startswith(os.path.realpath(docs_dir)) or not os.path.exists(filepath):
         return 'Not found', 404
     with open(filepath) as f:
-        content = f.read()
-    html = f'''<!DOCTYPE html><html><head><meta charset="UTF-8">
-    <title>MIDI Cleaner Docs</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <style>body{{max-width:800px;margin:40px auto;padding:0 20px;font-family:system-ui;line-height:1.6}}
-    pre{{background:#f5f5f5;padding:12px;border-radius:6px;overflow-x:auto}}
-    h1,h2,h3{{color:#333}}a{{color:#007bff}}</style>
-    </head><body><nav><a href="/docs/">Index</a> | <a href="/">Back to App</a></nav>
-    <pre style="white-space:pre-wrap">{content}</pre></body></html>'''
-    return html
+        raw = f.read()
+
+    body_html = _md.markdown(raw, extensions=['tables', 'fenced_code', 'toc', 'attr_list'])
+
+    # Build sidebar nav from doc files
+    doc_files = sorted(
+        f for f in os.listdir(docs_dir)
+        if f.endswith('.md') and f != 'README.md'
+    )
+    nav_items = '<li class="docs-nav-item"><a href="/docs/">Home</a></li>\n'
+    for df in doc_files:
+        label = df.replace('.md', '').split('_', 1)[-1].replace('_', ' ').title()
+        if df.startswith('0'):
+            label = df.replace('.md', '')[3:].replace('_', ' ').title()
+        active = ' class="active"' if df == filename else ''
+        nav_items += f'<li class="docs-nav-item"><a href="/docs/{df}"{active}>{label}</a></li>\n'
+
+    page = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MIDI Cleaner — Docs</title>
+<style>
+:root {{
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #232733;
+  --border: #2d3140; --text: #e1e4ed; --text-muted: #8b90a0;
+  --accent: #4f8cff; --accent-hover: #6ba0ff;
+}}
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.7;
+}}
+.docs-layout {{
+  display: flex; min-height: 100vh;
+}}
+.docs-sidebar {{
+  width: 260px; background: var(--surface); border-right: 1px solid var(--border);
+  padding: 24px 0; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  flex-shrink: 0;
+}}
+.docs-sidebar-header {{
+  padding: 0 20px 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px;
+}}
+.docs-sidebar-header a {{
+  color: var(--accent); text-decoration: none; font-weight: 600; font-size: 15px;
+}}
+.docs-sidebar-header a:hover {{ color: var(--accent-hover); }}
+.docs-nav {{ list-style: none; }}
+.docs-nav-item a {{
+  display: block; padding: 8px 20px; color: var(--text-muted);
+  text-decoration: none; font-size: 14px; transition: background 0.15s, color 0.15s;
+}}
+.docs-nav-item a:hover {{ background: var(--surface2); color: var(--text); }}
+.docs-nav-item a.active {{ color: var(--accent); background: var(--surface2); border-left: 3px solid var(--accent); }}
+.docs-content {{
+  flex: 1; max-width: 820px; margin: 0 auto; padding: 40px 48px;
+}}
+.docs-content h1 {{ font-size: 2em; margin-bottom: 16px; color: #fff; }}
+.docs-content h2 {{ font-size: 1.5em; margin-top: 40px; margin-bottom: 12px; color: #fff; padding-bottom: 6px; border-bottom: 1px solid var(--border); }}
+.docs-content h3 {{ font-size: 1.2em; margin-top: 28px; margin-bottom: 8px; color: var(--text); }}
+.docs-content p {{ margin-bottom: 14px; }}
+.docs-content ul, .docs-content ol {{ margin-bottom: 14px; padding-left: 24px; }}
+.docs-content li {{ margin-bottom: 6px; }}
+.docs-content a {{ color: var(--accent); text-decoration: none; }}
+.docs-content a:hover {{ text-decoration: underline; }}
+.docs-content strong {{ color: #fff; }}
+.docs-content code {{
+  background: var(--surface2); padding: 2px 6px; border-radius: 4px; font-size: 0.9em;
+  color: var(--accent);
+}}
+.docs-content pre {{
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 16px; overflow-x: auto; margin-bottom: 16px;
+}}
+.docs-content pre code {{ background: none; padding: 0; color: var(--text); }}
+.docs-content hr {{ border: none; border-top: 1px solid var(--border); margin: 32px 0; }}
+.docs-content blockquote {{
+  border-left: 3px solid var(--accent); padding: 8px 16px; margin: 14px 0;
+  background: var(--surface); border-radius: 0 6px 6px 0; color: var(--text-muted);
+}}
+.docs-content table {{ border-collapse: collapse; width: 100%; margin-bottom: 16px; }}
+.docs-content th, .docs-content td {{
+  border: 1px solid var(--border); padding: 8px 12px; text-align: left;
+}}
+.docs-content th {{ background: var(--surface2); color: #fff; }}
+.docs-content img {{ max-width: 100%; border-radius: 8px; margin: 12px 0; }}
+@media (max-width: 768px) {{
+  .docs-layout {{ flex-direction: column; }}
+  .docs-sidebar {{ width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); padding: 12px 0; }}
+  .docs-content {{ padding: 24px 16px; }}
+}}
+</style>
+</head>
+<body>
+<div class="docs-layout">
+  <nav class="docs-sidebar">
+    <div class="docs-sidebar-header">
+      <a href="/">&#8592; Back to App</a>
+    </div>
+    <ul class="docs-nav">
+      {nav_items}
+    </ul>
+  </nav>
+  <article class="docs-content">
+    {body_html}
+  </article>
+</div>
+</body>
+</html>'''
+    return page
 
 
 @app.route('/api/upload', methods=['POST'])
@@ -561,7 +665,11 @@ def optimization_status():
 
 @app.route('/api/optimize/apply', methods=['POST'])
 def apply_optimized():
-    """Apply the optimized result — copy optimized.mid as the processed file."""
+    """Return best params so the UI can apply them to the config controls.
+
+    Does NOT set processed_path — the user must still click "Process & Clean"
+    to generate the actual output file with these parameters.
+    """
     sid = session.get('session_id')
     if not sid:
         return jsonify({'error': 'No session'}), 400
@@ -572,29 +680,11 @@ def apply_optimized():
     if not st or st['status'] != 'done':
         return jsonify({'error': 'No completed optimization'}), 400
 
-    optimized_path = st.get('optimized_path')
-    if not optimized_path or not os.path.exists(optimized_path):
-        return jsonify({'error': 'Optimized file not found'}), 404
-
-    session['processed_path'] = optimized_path
-
-    try:
-        mid = mido.MidiFile(optimized_path)
-        tracks_info = []
-        for idx, track in enumerate(mid.tracks):
-            info = get_track_info(track, idx, mid.ticks_per_beat)
-            info['note_range'] = list(info['note_range'])
-            tracks_info.append(info)
-
-        return jsonify({
-            'success': True,
-            'tracks': tracks_info,
-            'best_params': st['best_params'],
-            'best_score': st['best_score'],
-        })
-    except Exception as e:
-        traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+    return jsonify({
+        'success': True,
+        'best_params': st['best_params'],
+        'best_score': st['best_score'],
+    })
 
 
 if __name__ == '__main__':
