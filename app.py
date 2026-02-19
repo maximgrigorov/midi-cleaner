@@ -408,12 +408,19 @@ def _run_optimization(session_id: str, midi_path: str, max_trials: int,
         llm_advisor = None
         if llm_config and llm_config.get('enabled'):
             try:
+                import logging as _log
                 from llm.guidance import LLMAdvisor
+                _llm_defaults = DEFAULT_CONFIG.get('llm', {})
+                _api_base = llm_config.get('api_base') or _llm_defaults.get('api_base', '')
+                _model = llm_config.get('model') or _llm_defaults.get('model', 'gpt-4o-mini')
+                _log.getLogger(__name__).info(
+                    '[LLM] Advisor enabled: api_base=%s model=%s', _api_base, _model
+                )
                 llm_advisor = LLMAdvisor(
-                    api_base=llm_config.get('api_base', 'http://alma:4000'),
-                    model=llm_config.get('model', 'gpt-4o-mini'),
-                    max_calls=llm_config.get('max_calls', 3),
-                    max_tokens=llm_config.get('max_tokens', 600),
+                    api_base=_api_base,
+                    model=_model,
+                    max_calls=llm_config.get('max_calls') or _llm_defaults.get('max_calls', 3),
+                    max_tokens=llm_config.get('max_tokens') or _llm_defaults.get('max_tokens', 600),
                     enabled=True,
                 )
             except Exception:
