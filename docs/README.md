@@ -2,6 +2,8 @@
 
 Welcome! This guide is written for musicians who work with notation software (Guitar Pro, MuseScore, Sibelius) and want to clean up MIDI files produced by AI transcription tools.
 
+![MIDI Cleaner Main Interface](/static/docs/images/01_main_upload.png)
+
 ## Table of Contents
 
 1. [Quick Start](/docs/01_quick_start.md) — Get up and running in 2 minutes

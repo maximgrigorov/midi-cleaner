@@ -27,3 +27,4 @@ Thumbs.db
 *.midi
 !tests/assets/*.mid
 tests/output/
+package-lock.json

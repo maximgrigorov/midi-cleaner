@@ -6,11 +6,16 @@ MIDI Cleaner takes AI-generated MIDI files and removes the digital noise that ma
 
 ## Getting Started
 
-1. **Open the app** in your browser (usually `http://localhost:5000`)
+When you open the app, you'll see the main interface:
+
+![Main Interface](/static/docs/images/01_main_upload.png)
+
+1. **Open the app** in your browser
 2. **Drop your MIDI file** onto the upload area, or click to browse
-3. **Choose a preset** from the dropdown at the top of the settings panel:
-   - "Auto (Recommended)" will detect your track type and pick sensible defaults
-   - Or pick one manually: "FX / Preserve", "Strings / Cleaner", etc.
+3. **Choose a mode** using the tabs at the top of the settings panel:
+   - **Preset** (default) — pick a preset like "FX / Preserve" or "Auto (Recommended)"
+   - **Auto-Tune** — let the optimizer find the best settings automatically
+   - **Manual** — adjust every slider and toggle yourself
 4. **Click "Process & Clean"**
 5. **Check the Processing Log** (collapsible panel) to see what changed
 6. **Download** your cleaned MIDI file

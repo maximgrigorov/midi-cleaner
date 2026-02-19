@@ -1,6 +1,8 @@
 # Understanding Controls
 
-This page explains what each setting does in plain language.
+This page explains what each setting does in plain language. You can access all controls by switching to **Manual** mode in the Processing Settings tabs.
+
+![Controls Page](/static/docs/images/04_controls.png)
 
 ---
 
