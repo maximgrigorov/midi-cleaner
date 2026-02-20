@@ -232,6 +232,43 @@ export async function fetchAllTracksPlayback(
   return apiFetch<AllTracksPlayback>(`/api/playback/all?source=${source}`);
 }
 
+// ── Session History ──
+
+export interface SessionEntry {
+  id: string;
+  session_id: string;
+  filename: string;
+  timestamp: number;
+  num_tracks: number;
+  status: 'uploaded' | 'processed';
+  notes_removed: number | null;
+}
+
+export interface RestoreSessionResponse extends UploadResponse {
+  has_processed: boolean;
+  config: Record<string, unknown> | null;
+}
+
+export async function fetchSessions(): Promise<SessionEntry[]> {
+  const res = await apiFetch<{ sessions: SessionEntry[] }>('/api/sessions');
+  return res.sessions;
+}
+
+export async function restoreSession(
+  fileId: string
+): Promise<RestoreSessionResponse> {
+  return apiFetch<RestoreSessionResponse>(
+    `/api/sessions/${fileId}/restore`,
+    { method: 'POST' }
+  );
+}
+
+export async function clearSessions(): Promise<{ removed: number }> {
+  return apiFetch<{ success: boolean; removed: number }>('/api/sessions', {
+    method: 'DELETE',
+  });
+}
+
 export async function fetchTrackNotation(
   trackIdx: number,
   source: 'original' | 'processed' = 'original',

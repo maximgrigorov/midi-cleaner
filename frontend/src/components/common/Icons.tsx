@@ -159,6 +159,25 @@ export const Play = (p: IconProps) => (
 export const Pause = (p: IconProps) => (
   <SvgIcon {...p} d={['M6 4h4v16H6z', 'M14 4h4v16h-4z']} />
 );
+export const Trash = (p: IconProps) => (
+  <SvgIcon
+    {...p}
+    d={[
+      'M3 6h18',
+      'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6',
+      'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+    ]}
+  />
+);
+export const Clock = (p: IconProps) => (
+  <SvgIcon
+    {...p}
+    d={[
+      'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z',
+      'M12 6v6l4 2',
+    ]}
+  />
+);
 export const ExternalLink = (p: IconProps) => (
   <SvgIcon
     {...p}

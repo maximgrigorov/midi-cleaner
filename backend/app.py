@@ -56,6 +56,38 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 _reports: dict[str, dict] = {}
 _reports_lock = threading.Lock()
 
+# Session history persistence
+import time as _time
+
+HISTORY_FILE = os.path.join(UPLOAD_DIR, '_history.json')
+
+def _load_history() -> list[dict]:
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE) as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return []
+
+def _save_history(history: list[dict]):
+    with open(HISTORY_FILE, 'w') as f:
+        json.dump(history, f, indent=2)
+
+def _append_history_entry(entry: dict):
+    history = _load_history()
+    history.insert(0, entry)
+    if len(history) > 100:
+        history = history[:100]
+    _save_history(history)
+
+
+@app.route('/static/docs/images/<path:filename>')
+def serve_docs_image(filename):
+    """Serve documentation images."""
+    images_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', 'images')
+    return send_file(os.path.join(images_dir, filename))
+
 
 def _get_session_dir():
     if 'session_id' not in session:
@@ -85,33 +117,53 @@ def _load_midi(source='original'):
 @app.route('/docs/')
 @app.route('/docs/<path:filename>')
 def serve_docs(filename='README.md'):
-    """Serve documentation markdown files rendered as HTML."""
+    """Serve documentation markdown files rendered as HTML. Supports /docs/ru/ prefix for Russian."""
     import markdown as _md
 
-    docs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs')
+    base_docs_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs')
+
+    is_russian = filename.startswith('ru/') or filename == 'ru'
+    if is_russian:
+        docs_dir = os.path.join(base_docs_dir, 'ru')
+        if filename in ('ru', 'ru/'):
+            filename = 'README.md'
+        else:
+            filename = filename[3:]  # strip "ru/"
+        lang = 'ru'
+        url_prefix = '/docs/ru/'
+        other_lang_url = '/docs/'
+        other_lang_label = 'English'
+    else:
+        docs_dir = base_docs_dir
+        lang = 'en'
+        url_prefix = '/docs/'
+        other_lang_url = '/docs/ru/'
+        other_lang_label = 'Русский'
+
     filepath = os.path.realpath(os.path.join(docs_dir, filename))
     if not filepath.startswith(os.path.realpath(docs_dir)) or not os.path.exists(filepath):
         return 'Not found', 404
-    with open(filepath) as f:
+    with open(filepath, encoding='utf-8') as f:
         raw = f.read()
 
     body_html = _md.markdown(raw, extensions=['tables', 'fenced_code', 'toc', 'attr_list'])
 
-    # Build sidebar nav from doc files
     doc_files = sorted(
         f for f in os.listdir(docs_dir)
         if f.endswith('.md') and f != 'README.md'
     )
-    nav_items = '<li class="docs-nav-item"><a href="/docs/">Home</a></li>\n'
+
+    home_label = 'Главная' if lang == 'ru' else 'Home'
+    nav_items = f'<li class="docs-nav-item"><a href="{url_prefix}">{home_label}</a></li>\n'
     for df in doc_files:
         label = df.replace('.md', '').split('_', 1)[-1].replace('_', ' ').title()
         if df.startswith('0'):
             label = df.replace('.md', '')[3:].replace('_', ' ').title()
         active = ' class="active"' if df == filename else ''
-        nav_items += f'<li class="docs-nav-item"><a href="/docs/{df}"{active}>{label}</a></li>\n'
+        nav_items += f'<li class="docs-nav-item"><a href="{url_prefix}{df}"{active}>{label}</a></li>\n'
 
     page = f'''<!DOCTYPE html>
-<html lang="en">
+<html lang="{lang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -181,6 +233,12 @@ body {{
 }}
 .docs-content th {{ background: var(--surface2); color: #fff; }}
 .docs-content img {{ max-width: 100%; border-radius: 8px; margin: 12px 0; }}
+.lang-switch {{
+  display: inline-block; padding: 6px 14px; margin: 0 20px 12px; font-size: 12px;
+  color: var(--accent); border: 1px solid var(--border); border-radius: 6px;
+  text-decoration: none; transition: background 0.15s;
+}}
+.lang-switch:hover {{ background: var(--surface2); }}
 @media (max-width: 768px) {{
   .docs-layout {{ flex-direction: column; }}
   .docs-sidebar {{ width: 100%; height: auto; position: static; border-right: none; border-bottom: 1px solid var(--border); padding: 12px 0; }}
@@ -194,6 +252,7 @@ body {{
     <div class="docs-sidebar-header">
       <a href="/">&#8592; Back to App</a>
     </div>
+    <a class="lang-switch" href="{other_lang_url}">{other_lang_label}</a>
     <ul class="docs-nav">
       {nav_items}
     </ul>
@@ -242,12 +301,28 @@ def upload_midi():
         info['note_range'] = list(info['note_range'])
         tracks_info.append(info)
 
+    note_tracks = [t for t in tracks_info if t['has_notes']]
+
+    _append_history_entry({
+        'id': file_id,
+        'session_id': session.get('session_id', ''),
+        'filename': original_name,
+        'timestamp': _time.time(),
+        'num_tracks': len(note_tracks),
+        'ticks_per_beat': mid.ticks_per_beat,
+        'status': 'uploaded',
+        'original_path': original_path,
+        'processed_path': None,
+        'config': None,
+        'notes_removed': None,
+    })
+
     return jsonify({
         'file_id': file_id,
         'filename': original_name,
         'type': mid.type,
         'ticks_per_beat': mid.ticks_per_beat,
-        'num_tracks': len(mid.tracks),
+        'num_tracks': len(note_tracks),
         'tracks': tracks_info,
     })
 
@@ -304,6 +379,18 @@ def process_midi():
             info = get_track_info(track, idx, processed.ticks_per_beat)
             info['note_range'] = list(info['note_range'])
             tracks_info.append(info)
+
+        total_removed = sum(s.notes_removed for s in report.steps)
+
+        history = _load_history()
+        for entry in history:
+            if entry['id'] == file_id:
+                entry['status'] = 'processed'
+                entry['processed_path'] = processed_path
+                entry['config'] = full_config
+                entry['notes_removed'] = total_removed
+                break
+        _save_history(history)
 
         return jsonify({
             'success': True,
@@ -687,6 +774,104 @@ def apply_optimized():
         'best_params': st['best_params'],
         'best_score': st['best_score'],
     })
+
+
+# ── Session History ──
+
+@app.route('/api/sessions')
+def list_sessions():
+    """Return the history of uploads/processing runs."""
+    history = _load_history()
+    safe = []
+    for h in history:
+        safe.append({
+            'id': h['id'],
+            'session_id': h.get('session_id', ''),
+            'filename': h['filename'],
+            'timestamp': h['timestamp'],
+            'num_tracks': h.get('num_tracks', 0),
+            'status': h.get('status', 'uploaded'),
+            'notes_removed': h.get('notes_removed'),
+        })
+    return jsonify({'sessions': safe})
+
+
+@app.route('/api/sessions/<session_file_id>/restore', methods=['POST'])
+def restore_session(session_file_id):
+    """Restore a previous session so the user can view/re-process it."""
+    history = _load_history()
+    entry = next((h for h in history if h['id'] == session_file_id), None)
+    if not entry:
+        return jsonify({'error': 'Session not found'}), 404
+
+    original_path = entry.get('original_path', '')
+    if not original_path or not os.path.exists(original_path):
+        return jsonify({'error': 'Original file no longer exists on disk'}), 404
+
+    session['file_id'] = entry['id']
+    session['original_name'] = entry['filename']
+    session['original_path'] = original_path
+    session['session_id'] = entry.get('session_id', session.get('session_id', str(uuid.uuid4())))
+
+    processed_path = entry.get('processed_path')
+    if processed_path and os.path.exists(processed_path):
+        session['processed_path'] = processed_path
+    else:
+        session.pop('processed_path', None)
+
+    try:
+        mid = mido.MidiFile(original_path)
+    except Exception as e:
+        return jsonify({'error': f'Cannot read MIDI file: {e}'}), 500
+
+    tracks_info = []
+    for idx, track in enumerate(mid.tracks):
+        info = get_track_info(track, idx, mid.ticks_per_beat)
+        info['suggested_thresholds'] = suggest_thresholds(info['track_type'])
+        info['note_range'] = list(info['note_range'])
+        tracks_info.append(info)
+
+    note_tracks = [t for t in tracks_info if t['has_notes']]
+
+    resp = {
+        'file_id': entry['id'],
+        'filename': entry['filename'],
+        'type': mid.type,
+        'ticks_per_beat': mid.ticks_per_beat,
+        'num_tracks': len(note_tracks),
+        'tracks': tracks_info,
+        'has_processed': processed_path is not None and os.path.exists(processed_path or ''),
+        'config': entry.get('config'),
+    }
+
+    return jsonify(resp)
+
+
+@app.route('/api/sessions', methods=['DELETE'])
+def clear_sessions():
+    """Clear all session history and delete uploaded/processed files."""
+    import shutil
+    history = _load_history()
+    removed_dirs = set()
+    for entry in history:
+        for key in ('original_path', 'processed_path'):
+            p = entry.get(key)
+            if p and os.path.exists(p):
+                d = os.path.dirname(p)
+                removed_dirs.add(d)
+
+    for d in removed_dirs:
+        if d.startswith(UPLOAD_DIR) and os.path.isdir(d):
+            shutil.rmtree(d, ignore_errors=True)
+
+    _save_history([])
+
+    with _reports_lock:
+        _reports.clear()
+
+    session.clear()
+
+    return jsonify({'success': True, 'removed': len(history)})
 
 
 if __name__ == '__main__':

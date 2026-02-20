@@ -51,3 +51,8 @@ If you want the tool to find optimal settings automatically:
 - **Use "FX / Preserve"** for most AI-transcribed stems — it's the safest default
 - **Check the log** — if you see lots of notes removed, you might want gentler settings
 - **Save your report** — if you find settings that work well, the report records them exactly
+- **Use History** to compare different processing runs — click the clock icon in the header
+
+## Limitations
+
+> **Important:** The current version only supports processing **single-track** MIDI files. If your file has multiple note-bearing tracks, the app will show a warning and disable processing. Merge tracks in your DAW before uploading, or upload one track at a time.

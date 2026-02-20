@@ -13,8 +13,9 @@ interface HeaderProps {
   isUploading: boolean;
   showAdvanced: boolean;
   onToggleAdvanced: (v: boolean) => void;
-  onOptimize: () => void;
+  onOptimize?: () => void;
   onReset: () => void;
+  onHistory: () => void;
   hasFile: boolean;
 }
 
@@ -28,6 +29,7 @@ export default function Header({
   onToggleAdvanced,
   onOptimize,
   onReset,
+  onHistory,
   hasFile,
 }: HeaderProps) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -83,7 +85,7 @@ export default function Header({
         </button>
         <button
           onClick={onOptimize}
-          disabled={!hasFile}
+          disabled={!hasFile || !onOptimize}
           className="flex items-center gap-1.5 px-3 h-8 text-xs rounded-md border border-border bg-surface-2 hover:bg-muted text-foreground transition disabled:opacity-50"
         >
           <Icons.Sparkles size={14} />
@@ -96,8 +98,16 @@ export default function Header({
           <Toggle checked={showAdvanced} onChange={onToggleAdvanced} />
         </div>
         <button
-          onClick={onReset}
+          onClick={onHistory}
           className="flex items-center gap-1.5 px-2 h-8 text-xs text-muted-foreground hover:text-foreground transition border-l border-border pl-3"
+          title="Session history"
+        >
+          <Icons.Clock size={14} />
+          History
+        </button>
+        <button
+          onClick={onReset}
+          className="flex items-center gap-1.5 px-2 h-8 text-xs text-muted-foreground hover:text-foreground transition"
           title="Reset all settings"
         >
           <Icons.X size={14} />

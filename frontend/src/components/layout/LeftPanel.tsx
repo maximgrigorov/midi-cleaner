@@ -32,6 +32,7 @@ interface LeftPanelProps {
   onProcess: () => void;
   selectedTrack: number | null;
   onSelectTrack: (idx: number | null) => void;
+  isMultiTrack?: boolean;
 }
 
 export default function LeftPanel({
@@ -44,6 +45,7 @@ export default function LeftPanel({
   onProcess,
   selectedTrack,
   onSelectTrack,
+  isMultiTrack,
 }: LeftPanelProps) {
   const disabled = !uploadData;
 
@@ -130,6 +132,15 @@ export default function LeftPanel({
           ))}
         </div>
       </div>
+
+      {isMultiTrack && (
+        <div className="mx-3 mt-2 p-2.5 rounded-md bg-yellow-900/20 border border-yellow-700/30 text-[11px] text-yellow-300 leading-relaxed">
+          <strong>Multi-track MIDI not supported yet.</strong> This file has{' '}
+          {uploadData.num_tracks} note tracks. Processing, Auto Optimize, and
+          per-track editing are designed for single-track files. Please upload a
+          file with one track or merge tracks in your DAW first.
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto">
         <Panel title="Cleaning">
@@ -462,13 +473,15 @@ export default function LeftPanel({
       <div className="p-4 border-t border-border">
         <button
           onClick={onProcess}
-          disabled={disabled || isProcessing}
+          disabled={disabled || isProcessing || isMultiTrack}
           className="w-full h-9 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:opacity-90 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
         >
           {isProcessing ? (
             <>
               <Icons.Loader size={14} /> Processing…
             </>
+          ) : isMultiTrack ? (
+            'Single-track files only'
           ) : (
             'Process & Clean'
           )}

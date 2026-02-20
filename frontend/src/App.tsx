@@ -4,6 +4,7 @@ import LeftPanel from './components/layout/LeftPanel';
 import CenterPanel from './components/layout/CenterPanel';
 import RightPanel from './components/layout/RightPanel';
 import OptimizePanel from './components/optimize/OptimizePanel';
+import HistoryPanel from './components/history/HistoryPanel';
 import { DEFAULT_CONFIG, type MidiConfig } from './config';
 import {
   uploadFile,
@@ -18,6 +19,7 @@ import {
   type ProcessResult,
   type PresetItem,
   type OptimizeStatus,
+  restoreSession,
 } from './api/client';
 
 interface Toast {
@@ -65,6 +67,8 @@ export default function App() {
   const [optLlmConfig, setOptLlmConfig] = useState({ ...DEFAULT_CONFIG.llm });
   const [optStatus, setOptStatus] = useState<OptimizeStatus | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const [showHistory, setShowHistory] = useState(false);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toast = useCallback(
@@ -135,10 +139,18 @@ export default function App() {
         } catch {
           // suggestion is optional
         }
-        toast({
-          title: 'File loaded',
-          description: `${data.filename} — ${data.num_tracks} tracks, ${data.ticks_per_beat} TPB`,
-        });
+        if (data.num_tracks > 1) {
+          toast({
+            title: 'Multi-track MIDI detected',
+            description: `${data.num_tracks} tracks found. Only single-track files are supported for now. Processing is disabled.`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'File loaded',
+            description: `${data.filename} — ${data.num_tracks} track, ${data.ticks_per_beat} TPB`,
+          });
+        }
       } catch {
         toast({ title: 'Upload failed', variant: 'destructive' });
       } finally {
@@ -245,6 +257,30 @@ export default function App() {
     []
   );
 
+  const isMultiTrack = (uploadData?.num_tracks ?? 0) > 1;
+
+  const handleRestoreSession = useCallback(
+    async (fileId: string) => {
+      try {
+        const data = await restoreSession(fileId);
+        setUploadData(data);
+        setProcessResult(null);
+        setSelectedTrack(null);
+        if (data.config) {
+          setConfig((prev) => ({ ...prev, ...(data.config as Partial<MidiConfig>) }));
+        }
+        setShowHistory(false);
+        toast({
+          title: 'Session restored',
+          description: `${data.filename}${data.has_processed ? ' (has processed result)' : ''}`,
+        });
+      } catch {
+        toast({ title: 'Failed to restore session', variant: 'destructive' });
+      }
+    },
+    [toast]
+  );
+
   // Drag & drop
   const [isDragging, setIsDragging] = useState(false);
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -312,8 +348,9 @@ export default function App() {
         isUploading={isUploading}
         showAdvanced={showAdvanced}
         onToggleAdvanced={setShowAdvanced}
-        onOptimize={handleShowOptimize}
+        onOptimize={isMultiTrack ? undefined : handleShowOptimize}
         onReset={() => window.location.reload()}
+        onHistory={() => setShowHistory(true)}
         hasFile={!!uploadData}
       />
 
@@ -343,6 +380,7 @@ export default function App() {
           onProcess={handleProcess}
           selectedTrack={selectedTrack}
           onSelectTrack={setSelectedTrack}
+          isMultiTrack={isMultiTrack}
         />
         <CenterPanel
           result={processResult}
@@ -353,6 +391,13 @@ export default function App() {
         />
         <RightPanel result={processResult} config={config} toast={toast} />
       </div>
+
+      <HistoryPanel
+        isOpen={showHistory}
+        onClose={() => setShowHistory(false)}
+        onRestore={handleRestoreSession}
+        currentFileId={uploadData?.file_id ?? null}
+      />
 
       <ToastContainer toasts={toasts} />
     </div>

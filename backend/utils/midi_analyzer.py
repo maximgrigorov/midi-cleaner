@@ -228,10 +228,11 @@ def generate_playback_data(track, ticks_per_beat):
         onset_seconds = onset_beats * (60.0 / bpm)
         duration_seconds = duration_beats * (60.0 / bpm)
         playback.append({
+            'pitch': n['pitch'],
             'note': midi_note_to_name(n['pitch']),
             'time': round(onset_seconds, 4),
             'duration': round(duration_seconds, 4),
-            'velocity': round(n['velocity'] / 127.0, 3),
+            'velocity': n['velocity'],
         })
 
     return {
