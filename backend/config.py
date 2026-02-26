@@ -1,6 +1,9 @@
 """Default configuration for MIDI Cleaner application."""
 
 DEFAULT_CONFIG = {
+    # Force BPM (None = disabled, float = override all tempo events)
+    'force_bpm': None,
+
     # Tempo deduplication (removes redundant set_tempo events)
     'tempo_deduplicator': {'enabled': True},
 

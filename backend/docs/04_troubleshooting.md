@@ -36,6 +36,18 @@ Common problems and how to fix them.
 
 ---
 
+## Tracks desync in Guitar Pro
+
+**Likely cause:** The MIDI file contains conflicting tempo maps from different AI transcription sources. Each source embedded its own tempo curve, and Guitar Pro follows them all, causing tracks to drift apart.
+
+**Fix:**
+- Enable **Force BPM** and set it to the song's actual tempo (e.g. 120)
+- This removes all existing tempo events and replaces them with one fixed value
+- After processing, all tracks will share the same tempo map and stay in sync
+- If you don't know the exact BPM, try the value shown in the file info after upload, or use an online BPM tapper
+
+---
+
 ## Guitar Pro shows wrong note durations
 
 **Likely cause:** Notes within chords have different durations, forcing Guitar Pro to create separate voices.

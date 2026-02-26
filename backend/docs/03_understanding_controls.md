@@ -16,6 +16,16 @@ This page explains what each setting does in plain language. You can access all 
 
 ---
 
+## Force BPM
+
+**What it does:** Removes every tempo event from the MIDI file and replaces them with a single fixed tempo. This forces the entire file to play at one constant BPM.
+
+**When to use it:** When combining MIDI files from different AI transcription sources (e.g. Suno + Klang.io) that have divergent tempo maps. These cause tracks to desync in Guitar Pro because each source embedded its own tempo curve. Forcing a single BPM eliminates the conflict.
+
+**Recommendation:** OFF by default. Only enable when you see tracks drifting out of sync due to conflicting tempo maps. Set the BPM value to match your song's actual tempo (40–300 range).
+
+---
+
 ## Deduplicate Tempo
 
 **What it does:** AI transcription tools sometimes write the tempo marking (like "120 BPM") hundreds of times throughout the file. Notation software reads each one and clutters the score with tempo markings.
