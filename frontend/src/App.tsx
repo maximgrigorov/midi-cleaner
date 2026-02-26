@@ -249,7 +249,6 @@ export default function App() {
     []
   );
 
-  const isMultiTrack = (uploadData?.num_tracks ?? 0) > 1;
   const disabledTracks = (config.disabled_tracks ?? []) as number[];
 
   const handleRestoreSession = useCallback(
