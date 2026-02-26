@@ -212,6 +212,60 @@ def get_tempo(track):
     return 500000
 
 
+def analyze_tempo_map(midi_file):
+    """Analyze the tempo map across all tracks and return the dominant BPM.
+
+    Collects every set_tempo event with its absolute tick position, then
+    returns the tempo value that spans the most ticks (i.e. the dominant
+    tempo).  Falls back to 120 BPM if no set_tempo events exist.
+
+    Returns:
+        float — dominant BPM rounded to 1 decimal place
+    """
+    # Collect all set_tempo events with absolute tick positions
+    tempo_events = []
+    for track in midi_file.tracks:
+        abs_tick = 0
+        for msg in track:
+            abs_tick += msg.time
+            if msg.type == 'set_tempo':
+                tempo_events.append((abs_tick, msg.tempo))
+
+    if not tempo_events:
+        return 120.0
+
+    if len(tempo_events) == 1:
+        return round(mido.tempo2bpm(tempo_events[0][1]), 1)
+
+    # Sort by tick
+    tempo_events.sort(key=lambda x: x[0])
+
+    # Find the total length of the file (last event in any track)
+    total_ticks = 0
+    for track in midi_file.tracks:
+        t = 0
+        for msg in track:
+            t += msg.time
+        total_ticks = max(total_ticks, t)
+
+    if total_ticks == 0:
+        return round(mido.tempo2bpm(tempo_events[0][1]), 1)
+
+    # Calculate how many ticks each tempo value spans
+    tempo_durations = {}  # tempo_usec -> total_ticks
+    for i, (tick, tempo) in enumerate(tempo_events):
+        if i + 1 < len(tempo_events):
+            span = tempo_events[i + 1][0] - tick
+        else:
+            span = total_ticks - tick
+        span = max(0, span)
+        tempo_durations[tempo] = tempo_durations.get(tempo, 0) + span
+
+    # Pick the tempo with the longest span
+    dominant_tempo = max(tempo_durations, key=tempo_durations.get)
+    return round(mido.tempo2bpm(dominant_tempo), 1)
+
+
 def get_key_signature(track):
     """Extract key signature from a track. Returns key string or 'C' default."""
     for msg in track:

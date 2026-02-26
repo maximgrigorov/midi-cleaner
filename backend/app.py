@@ -36,7 +36,7 @@ from utils.midi_analyzer import (
     analyze_track_for_notation,
     generate_playback_data,
 )
-from utils.midi_helpers import get_tempo
+from utils.midi_helpers import get_tempo, analyze_tempo_map
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'midi-cleaner-dev-key-change-in-prod')
@@ -317,12 +317,15 @@ def upload_midi():
         'notes_removed': None,
     })
 
+    detected_bpm = analyze_tempo_map(mid)
+
     return jsonify({
         'file_id': file_id,
         'filename': original_name,
         'type': mid.type,
         'ticks_per_beat': mid.ticks_per_beat,
         'num_tracks': len(note_tracks),
+        'detected_bpm': detected_bpm,
         'tracks': tracks_info,
     })
 

@@ -24,7 +24,7 @@ const I18N = {
         min_duration: 'Min Note Duration (ticks)', min_duration_desc: 'Notes shorter than this are removed',
         min_velocity: 'Min Velocity', min_velocity_desc: 'Notes quieter than this are removed',
         same_pitch_overlap: 'Same-Pitch Overlap Resolver', same_pitch_overlap_desc: 'Remove duplicate overlapping notes of the same pitch per channel',
-        force_bpm: 'Force BPM', force_bpm_desc: 'Override all tempo events with a single fixed BPM',
+        force_bpm: 'Force BPM', force_bpm_desc: 'Override all tempo events with a single fixed BPM', detected_bpm: 'Detected: {bpm} BPM',
         tempo_dedup: 'Deduplicate Tempo', tempo_dedup_desc: 'Remove redundant tempo markings (fixes ♩=91 spam)',
         start_bar: 'Start Processing from Bar', start_bar_desc: 'Skip already-cleaned bars (1 = all)',
         merge_tracks: 'Merge All Tracks', merge_tracks_desc: 'Flatten into a single track (Type 0) for manual editing',
@@ -77,7 +77,7 @@ const I18N = {
         min_duration: 'Мин. длительность (тики)', min_duration_desc: 'Ноты короче этого удаляются',
         min_velocity: 'Мин. громкость', min_velocity_desc: 'Ноты тише этого удаляются',
         same_pitch_overlap: 'Разрешение наложений одной высоты', same_pitch_overlap_desc: 'Удалить дублирующиеся наложенные ноты одной высоты',
-        force_bpm: 'Принудительный BPM', force_bpm_desc: 'Заменить все темповые события одним фиксированным BPM',
+        force_bpm: 'Принудительный BPM', force_bpm_desc: 'Заменить все темповые события одним фиксированным BPM', detected_bpm: 'Обнаружено: {bpm} BPM',
         tempo_dedup: 'Дедупликация темпа', tempo_dedup_desc: 'Удалить повторяющиеся темповые метки (убирает ♩=91 спам)',
         start_bar: 'Начать с такта', start_bar_desc: 'Пропустить очищенные такты (1 = всё)',
         merge_tracks: 'Объединить дорожки', merge_tracks_desc: 'Слить все дорожки в одну (Type 0) для ручной правки',
@@ -206,6 +206,7 @@ async function uploadFile(file) {
         initUpload();
 
         showFileInfo(data);
+        showDetectedBpm(data.detected_bpm);
         showConfig();
         showOptimizePanel();
         showTracks(data.tracks);
@@ -231,6 +232,19 @@ function showFileInfo(data) {
     const bar = $('.file-info');
     bar.innerHTML = `<span class="tag">Format: <strong>Type ${data.type}</strong></span><span class="tag">PPQ: <strong>${data.ticks_per_beat}</strong></span><span class="tag">${t('tracks')}: <strong>${data.num_tracks}</strong></span>`;
     bar.classList.add('visible');
+}
+
+function showDetectedBpm(bpm) {
+    const hint = $('#detected-bpm-hint');
+    if (!hint) return;
+    if (bpm == null) { hint.style.display = 'none'; return; }
+    hint.textContent = t('detected_bpm').replace('{bpm}', bpm);
+    hint.style.display = '';
+    hint.style.cursor = 'pointer';
+    hint.title = 'Click to use this value';
+    hint.onclick = () => {
+        $('#cfg-force-bpm-value').value = Math.round(bpm);
+    };
 }
 
 // ─────────────────────────────────────────────

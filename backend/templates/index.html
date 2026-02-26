@@ -87,10 +87,11 @@
                     <span data-i18n="force_bpm">Force BPM</span>
                     <span class="desc" data-i18n="force_bpm_desc">Override all tempo events with a single fixed BPM</span>
                 </label>
-                <div style="display:flex;gap:8px;align-items:center">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
                     <label class="toggle"><input type="checkbox" id="cfg-force-bpm"><span class="slider"></span></label>
                     <input type="number" id="cfg-force-bpm-value" min="40" max="300" value="120" style="width:70px" disabled>
                     <span class="desc">BPM</span>
+                    <span id="detected-bpm-hint" class="desc" style="margin-left:4px;color:var(--accent,#4dabf7);display:none"></span>
                 </div>
             </div>
             <div class="config-item">

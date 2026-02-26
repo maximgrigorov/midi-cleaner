@@ -16,6 +16,7 @@ import mido
 import pytest
 
 from processors.tempo_forcer import TempoForcer
+from utils.midi_helpers import analyze_tempo_map
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -160,3 +161,58 @@ class TestTempoForcer:
             result = forcer.process(mid)
             tempos = _tempo_events(result)
             assert tempos[0][2] == mido.bpm2tempo(bpm)
+
+
+class TestAnalyzeTempoMap:
+
+    def test_no_tempo_events_returns_120(self):
+        """A file with no set_tempo defaults to 120 BPM."""
+        mid = _make_midi([
+            [
+                mido.Message('note_on', channel=0, note=60, velocity=80, time=0),
+                mido.Message('note_off', channel=0, note=60, velocity=0, time=480),
+                mido.MetaMessage('end_of_track', time=0),
+            ],
+        ])
+        assert analyze_tempo_map(mid) == 120.0
+
+    def test_single_tempo_event(self):
+        """A file with one set_tempo returns that BPM."""
+        mid = _make_midi([
+            [
+                mido.MetaMessage('set_tempo', tempo=TEMPO_120, time=0),
+                mido.MetaMessage('end_of_track', time=960),
+            ],
+        ])
+        assert analyze_tempo_map(mid) == 120.0
+
+    def test_dominant_tempo_wins(self):
+        """The tempo spanning the most ticks is returned."""
+        # 120 BPM for ticks 0-480 (480 ticks), then 100 BPM for ticks 480-1920 (1440 ticks)
+        mid = _make_midi([
+            [
+                mido.MetaMessage('set_tempo', tempo=TEMPO_120, time=0),
+                mido.MetaMessage('set_tempo', tempo=TEMPO_100, time=480),
+                mido.MetaMessage('end_of_track', time=1440),
+            ],
+        ])
+        assert analyze_tempo_map(mid) == 100.0
+
+    def test_empty_file(self):
+        """An empty file defaults to 120 BPM."""
+        mid = mido.MidiFile(type=1, ticks_per_beat=480)
+        assert analyze_tempo_map(mid) == 120.0
+
+    def test_duplicate_tempos_summed(self):
+        """Same tempo at multiple points sums their spans."""
+        # 120 BPM: ticks 0-480, then 100 BPM: ticks 480-960, then 120 BPM: ticks 960-1920
+        # 120 BPM spans 480 + 960 = 1440 ticks, 100 BPM spans 480 ticks → 120 wins
+        mid = _make_midi([
+            [
+                mido.MetaMessage('set_tempo', tempo=TEMPO_120, time=0),
+                mido.MetaMessage('set_tempo', tempo=TEMPO_100, time=480),
+                mido.MetaMessage('set_tempo', tempo=TEMPO_120, time=480),
+                mido.MetaMessage('end_of_track', time=960),
+            ],
+        ])
+        assert analyze_tempo_map(mid) == 120.0
