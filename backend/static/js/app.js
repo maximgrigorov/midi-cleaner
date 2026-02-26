@@ -24,6 +24,7 @@ const I18N = {
         min_duration: 'Min Note Duration (ticks)', min_duration_desc: 'Notes shorter than this are removed',
         min_velocity: 'Min Velocity', min_velocity_desc: 'Notes quieter than this are removed',
         same_pitch_overlap: 'Same-Pitch Overlap Resolver', same_pitch_overlap_desc: 'Remove duplicate overlapping notes of the same pitch per channel',
+        force_bpm: 'Force BPM', force_bpm_desc: 'Override all tempo events with a single fixed BPM',
         tempo_dedup: 'Deduplicate Tempo', tempo_dedup_desc: 'Remove redundant tempo markings (fixes ♩=91 spam)',
         start_bar: 'Start Processing from Bar', start_bar_desc: 'Skip already-cleaned bars (1 = all)',
         merge_tracks: 'Merge All Tracks', merge_tracks_desc: 'Flatten into a single track (Type 0) for manual editing',
@@ -76,6 +77,7 @@ const I18N = {
         min_duration: 'Мин. длительность (тики)', min_duration_desc: 'Ноты короче этого удаляются',
         min_velocity: 'Мин. громкость', min_velocity_desc: 'Ноты тише этого удаляются',
         same_pitch_overlap: 'Разрешение наложений одной высоты', same_pitch_overlap_desc: 'Удалить дублирующиеся наложенные ноты одной высоты',
+        force_bpm: 'Принудительный BPM', force_bpm_desc: 'Заменить все темповые события одним фиксированным BPM',
         tempo_dedup: 'Дедупликация темпа', tempo_dedup_desc: 'Удалить повторяющиеся темповые метки (убирает ♩=91 спам)',
         start_bar: 'Начать с такта', start_bar_desc: 'Пропустить очищенные такты (1 = всё)',
         merge_tracks: 'Объединить дорожки', merge_tracks_desc: 'Слить все дорожки в одну (Type 0) для ручной правки',
@@ -243,6 +245,7 @@ function readGlobalConfig() {
     const presetEl = $('#cfg-preset');
     return {
         _preset: presetEl ? presetEl.value : '',
+        force_bpm: $('#cfg-force-bpm').checked ? parseFloat($('#cfg-force-bpm-value').value) : null,
         tempo_deduplicator: { enabled: $('#cfg-tempo-dedup').checked },
         merge_voices: $('#cfg-merge-voices').checked,
         remove_overlaps: $('#cfg-remove-overlaps').checked,
@@ -994,6 +997,12 @@ async function applySelectedPreset() {
 }
 
 function applyConfigToUI(cfg) {
+    if (cfg.force_bpm !== undefined) {
+        const hasBpm = cfg.force_bpm !== null;
+        $('#cfg-force-bpm').checked = hasBpm;
+        $('#cfg-force-bpm-value').disabled = !hasBpm;
+        if (hasBpm) $('#cfg-force-bpm-value').value = cfg.force_bpm;
+    }
     if (cfg.filter_noise !== undefined) $('#cfg-filter-noise').checked = cfg.filter_noise;
     if (cfg.min_duration_ticks !== undefined) { $('#cfg-min-duration').value = cfg.min_duration_ticks; updateSliderDisplay('#cfg-min-duration'); }
     if (cfg.min_velocity !== undefined) { $('#cfg-min-velocity').value = cfg.min_velocity; updateSliderDisplay('#cfg-min-velocity'); }
@@ -1090,6 +1099,11 @@ document.addEventListener('DOMContentLoaded', () => {
     initSliders();
     initModeTabs();
     loadPresets();
+
+    // Force BPM toggle enables/disables the BPM number input
+    $('#cfg-force-bpm').addEventListener('change', () => {
+        $('#cfg-force-bpm-value').disabled = !$('#cfg-force-bpm').checked;
+    });
 
     $('#lang-toggle').addEventListener('click', toggleLanguage);
     $('#btn-process').addEventListener('click', processFile);

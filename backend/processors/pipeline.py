@@ -1,18 +1,19 @@
 """Processing Pipeline — orchestrates all MIDI processors in the correct order.
 
 Processing order (per-track):
-  0. Tempo Dedup              — remove redundant set_tempo meta events (all tracks)
-  1. Pitch Cluster            — merge near-pitch simultaneous notes (AI transcription noise)
-  2. Voice Merger             — consolidate channels to one voice, align chord durations
-  3. CC Filter                — remove sustain/legato CC messages
-  4. Triplet Remover          — convert triplet durations to straight eighths
-  5. Quantizer                — snap onset times and durations to grid (bar-aware)
-  6. Noise Filter             — remove short/quiet parasitic notes
-  7. Same-Pitch Overlap Resolver — deduplicate overlapping same-pitch notes (per channel)
-  8. Meta Cleanup             — strip stray tempo/time-sig events from data tracks
+  0. Tempo Forcer             — force all tracks to a single fixed BPM (optional)
+  1. Tempo Dedup              — remove redundant set_tempo meta events (all tracks)
+  2. Pitch Cluster            — merge near-pitch simultaneous notes (AI transcription noise)
+  3. Voice Merger             — consolidate channels to one voice, align chord durations
+  4. CC Filter                — remove sustain/legato CC messages
+  5. Triplet Remover          — convert triplet durations to straight eighths
+  6. Quantizer                — snap onset times and durations to grid (bar-aware)
+  7. Noise Filter             — remove short/quiet parasitic notes
+  8. Same-Pitch Overlap Resolver — deduplicate overlapping same-pitch notes (per channel)
+  9. Meta Cleanup             — strip stray tempo/time-sig events from data tracks
 
 Post-processing (file-level):
-  9. Merge Tracks             — optionally flatten all tracks into a single MTrk
+  10. Merge Tracks            — optionally flatten all tracks into a single MTrk
 """
 
 import copy
@@ -21,6 +22,7 @@ from collections import defaultdict
 
 import mido
 
+from processors.tempo_forcer import TempoForcer
 from processors.tempo_deduplicator import TempoDeduplicator
 from processors.pitch_cluster import PitchClusterProcessor
 from processors.voice_merger import VoiceMerger
@@ -71,6 +73,18 @@ class ProcessingPipeline:
         ]
 
         output = mido.MidiFile(type=midi_file.type, ticks_per_beat=tpb)
+
+        # Step 0: Tempo Forcer (file-level, optional)
+        force_bpm = self.config.get('force_bpm')
+        force_bpm_enabled = force_bpm is not None
+        pre_force_tempo = sum(1 for t in midi_file.tracks for m in t if m.type == 'set_tempo')
+        force_step = self.ctx.begin_step('TempoForcer', force_bpm_enabled,
+                                         count_notes_midi(midi_file))
+        if force_bpm_enabled:
+            forcer = TempoForcer(float(force_bpm))
+            midi_file = forcer.process(midi_file)
+            force_step.tempo_events_removed = forcer.tempo_events_removed
+        self.ctx.end_step(count_notes_midi(midi_file))
 
         time_sig = (4, 4)
         if midi_file.tracks:

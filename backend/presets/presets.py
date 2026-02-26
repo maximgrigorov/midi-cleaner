@@ -13,6 +13,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Keep original FX character — only remove obvious noise.',
         'track_types': ['guitar', 'other'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 60,
             'min_velocity': 3,
@@ -30,6 +31,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Aggressive cleanup for FX tracks — tighter filtering, quantized.',
         'track_types': ['guitar', 'other'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 120,
             'min_velocity': 15,
@@ -49,6 +51,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Keep legato phrasing and polyphony — gentle noise removal only.',
         'track_types': ['strings'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 80,
             'min_velocity': 5,
@@ -66,6 +69,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Tighter string cleanup — reduce noise, merge voices for cleaner score.',
         'track_types': ['strings'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 120,
             'min_velocity': 12,
@@ -85,6 +89,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Keep melody intact — minimal filtering, no quantization.',
         'track_types': ['vocal'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 60,
             'min_velocity': 5,
@@ -102,6 +107,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Clean guitar — remove short artifacts, keep note feel.',
         'track_types': ['guitar'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 100,
             'min_velocity': 10,
@@ -120,6 +126,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Bass cleanup — remove ghost notes, keep timing.',
         'track_types': ['bass'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 100,
             'min_velocity': 12,
@@ -138,6 +145,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         'description': 'Keep drum hits — very short minimum duration, low velocity floor.',
         'track_types': ['drums'],
         'config': {
+            'force_bpm': None,
             'filter_noise': True,
             'min_duration_ticks': 30,
             'min_velocity': 5,
