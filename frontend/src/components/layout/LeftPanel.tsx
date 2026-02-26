@@ -32,7 +32,8 @@ interface LeftPanelProps {
   onProcess: () => void;
   selectedTrack: number | null;
   onSelectTrack: (idx: number | null) => void;
-  isMultiTrack?: boolean;
+  disabledTracks?: number[];
+  onToggleTrack?: (idx: number) => void;
 }
 
 export default function LeftPanel({
@@ -45,7 +46,8 @@ export default function LeftPanel({
   onProcess,
   selectedTrack,
   onSelectTrack,
-  isMultiTrack,
+  disabledTracks = [],
+  onToggleTrack,
 }: LeftPanelProps) {
   const disabled = !uploadData;
 
@@ -92,55 +94,63 @@ export default function LeftPanel({
           Tracks
         </div>
         <div className="px-2 pb-2 space-y-0.5 max-h-[160px] overflow-y-auto">
-          {uploadData.tracks.filter((t: TrackInfo) => t.has_notes).map((track: TrackInfo) => (
-            <button
-              key={track.index}
-              type="button"
-              onClick={() =>
-                onSelectTrack(selectedTrack === track.index ? null : track.index)
-              }
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-left transition ${
-                selectedTrack === track.index
-                  ? 'bg-primary/15 border border-primary/30'
-                  : 'hover:bg-surface-2 border border-transparent'
-              }`}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] text-foreground truncate">
-                  {track.name || `Track ${track.index}`}
-                </div>
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span
-                    className={`text-[9px] px-1 py-0.5 rounded ${TYPE_BADGES[track.track_type] || TYPE_BADGES.unknown}`}
-                  >
-                    {track.track_type}
-                  </span>
-                  {track.note_count > 0 && (
-                    <span className="text-[9px] text-muted-foreground">
-                      {track.note_count} notes
+          {uploadData.tracks.filter((t: TrackInfo) => t.has_notes).map((track: TrackInfo) => {
+            const isDisabled = disabledTracks.includes(track.index);
+            return (
+              <div
+                key={track.index}
+                className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded text-left transition ${
+                  selectedTrack === track.index
+                    ? 'bg-primary/15 border border-primary/30'
+                    : 'hover:bg-surface-2 border border-transparent'
+                } ${isDisabled ? 'opacity-50' : ''}`}
+              >
+                {track.index > 0 && onToggleTrack && (
+                  <input
+                    type="checkbox"
+                    checked={!isDisabled}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      onToggleTrack(track.index);
+                    }}
+                    className="accent-primary shrink-0"
+                    title={isDisabled ? 'Enable track' : 'Disable track'}
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelectTrack(selectedTrack === track.index ? null : track.index)
+                  }
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="text-[11px] text-foreground truncate">
+                    {track.name || `Track ${track.index}`}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span
+                      className={`text-[9px] px-1 py-0.5 rounded ${TYPE_BADGES[track.track_type] || TYPE_BADGES.unknown}`}
+                    >
+                      {track.track_type}
                     </span>
-                  )}
-                  {track.note_range[0] > 0 && (
-                    <span className="text-[9px] text-muted-foreground">
-                      {midiNoteToName(track.note_range[0])}–
-                      {midiNoteToName(track.note_range[1])}
-                    </span>
-                  )}
-                </div>
+                    {track.note_count > 0 && (
+                      <span className="text-[9px] text-muted-foreground">
+                        {track.note_count} notes
+                      </span>
+                    )}
+                    {track.note_range[0] > 0 && (
+                      <span className="text-[9px] text-muted-foreground">
+                        {midiNoteToName(track.note_range[0])}–
+                        {midiNoteToName(track.note_range[1])}
+                      </span>
+                    )}
+                  </div>
+                </button>
               </div>
-            </button>
-          ))}
+            );
+          })}
         </div>
       </div>
-
-      {isMultiTrack && (
-        <div className="mx-3 mt-2 p-2.5 rounded-md bg-yellow-900/20 border border-yellow-700/30 text-[11px] text-yellow-300 leading-relaxed">
-          <strong>Multi-track MIDI not supported yet.</strong> This file has{' '}
-          {uploadData.num_tracks} note tracks. Processing, Auto Optimize, and
-          per-track editing are designed for single-track files. Please upload a
-          file with one track or merge tracks in your DAW first.
-        </div>
-      )}
 
       <div className="flex-1 overflow-y-auto">
         <Panel title="Cleaning">
@@ -473,15 +483,13 @@ export default function LeftPanel({
       <div className="p-4 border-t border-border">
         <button
           onClick={onProcess}
-          disabled={disabled || isProcessing || isMultiTrack}
+          disabled={disabled || isProcessing}
           className="w-full h-9 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:opacity-90 transition flex items-center justify-center gap-1.5 disabled:opacity-50"
         >
           {isProcessing ? (
             <>
               <Icons.Loader size={14} /> Processing…
             </>
-          ) : isMultiTrack ? (
-            'Single-track files only'
           ) : (
             'Process & Clean'
           )}

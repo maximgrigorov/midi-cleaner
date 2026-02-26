@@ -53,6 +53,10 @@ class ProcessingPipeline:
     def process(self, midi_file):
         """Process an entire MIDI file.
 
+        Track 0 (conductor) is always preserved as-is, never processed.
+        Each data track (track 1+) is processed independently.
+        Disabled tracks are excluded from the output entirely.
+
         Args:
             midi_file: mido.MidiFile
 
@@ -61,6 +65,7 @@ class ProcessingPipeline:
         """
         pipeline_start = time.time()
         tpb = midi_file.ticks_per_beat
+        disabled_tracks = set(self.config.get('disabled_tracks', []))
 
         self.ctx.report.input_metrics = {
             'total_notes': count_notes_midi(midi_file),
@@ -77,7 +82,6 @@ class ProcessingPipeline:
         # Step 0: Tempo Forcer (file-level, optional)
         force_bpm = self.config.get('force_bpm')
         force_bpm_enabled = force_bpm is not None
-        pre_force_tempo = sum(1 for t in midi_file.tracks for m in t if m.type == 'set_tempo')
         force_step = self.ctx.begin_step('TempoForcer', force_bpm_enabled,
                                          count_notes_midi(midi_file))
         if force_bpm_enabled:
@@ -95,10 +99,15 @@ class ProcessingPipeline:
         tempo_dedup = TempoDeduplicator(self.config)
 
         for track_idx, track in enumerate(midi_file.tracks):
+            # Skip disabled tracks entirely (conductor track 0 is never disabled)
+            if track_idx > 0 and track_idx in disabled_tracks:
+                continue
+
             track_info = get_track_info(track, track_idx, tpb)
             deduped = tempo_dedup.process(copy.deepcopy(track), tpb)
 
-            if not track_info['has_notes']:
+            # Conductor track (track 0) is always preserved as-is
+            if track_idx == 0 or not track_info['has_notes']:
                 output.tracks.append(deduped)
                 continue
 

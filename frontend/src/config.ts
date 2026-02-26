@@ -20,6 +20,7 @@ export interface MidiConfig {
   start_bar: number;
   merge_tracks: { enabled: boolean; include_cc: boolean };
   track_overrides: Record<string, Record<string, unknown>>;
+  disabled_tracks: number[];
   llm: {
     enabled: boolean;
     api_base: string;
@@ -48,6 +49,7 @@ export const DEFAULT_CONFIG: MidiConfig = {
   start_bar: 1,
   merge_tracks: { enabled: false, include_cc: false },
   track_overrides: {},
+  disabled_tracks: [],
   llm: {
     enabled: true,
     api_base: 'http://alma:4000',

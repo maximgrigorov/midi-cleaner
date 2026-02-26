@@ -251,8 +251,23 @@ def detect_dominant_track_type(midi_file: mido.MidiFile) -> str:
 
 # ── Main optimizer ───────────────────────────────────────────────────────
 
+def detect_per_track_types(midi_file: mido.MidiFile) -> dict[int, str]:
+    """Return a mapping of track_idx -> track_type for all data tracks with notes."""
+    result: dict[int, str] = {}
+    for idx, track in enumerate(midi_file.tracks):
+        info = get_track_info(track, idx, midi_file.ticks_per_beat)
+        if info['has_notes']:
+            result[idx] = info['track_type']
+    return result
+
+
 class AutoTuner:
-    """Optuna-based optimizer that wraps the existing ProcessingPipeline."""
+    """Optuna-based optimizer that wraps the existing ProcessingPipeline.
+
+    For multi-track MIDI (Type 1), runs per-track optimization independently.
+    Each track gets its own detected type and optimized parameters, stored as
+    track_overrides in the final config.
+    """
 
     def __init__(self, midi_file: mido.MidiFile, *,
                  max_trials: int = 40,
@@ -268,13 +283,28 @@ class AutoTuner:
         self._llm = llm_advisor
         self._llm_override: dict[str, Any] | None = None
         self._metrics_before: dict[str, float] = {}
+        self._per_track_types = detect_per_track_types(midi_file)
 
     @property
     def track_type(self) -> str:
         return self._track_type
 
+    def _is_multitrack(self) -> bool:
+        """Return True if the file has more than one data track with notes."""
+        return len(self._per_track_types) > 1
+
     def optimize(self) -> OptimizationResult:
-        """Run the full Optuna optimization loop. Returns OptimizationResult."""
+        """Run the full Optuna optimization loop. Returns OptimizationResult.
+
+        For multi-track files, optimizes each track independently and combines
+        per-track overrides into the final config.
+        """
+        if self._is_multitrack():
+            return self._optimize_multitrack()
+        return self._optimize_single()
+
+    def _optimize_single(self) -> OptimizationResult:
+        """Original single-track optimization loop."""
         _, self._metrics_before = score_midi(self.midi_file)
 
         early_stop = _EarlyStopCallback()
@@ -289,9 +319,6 @@ class AutoTuner:
             show_progress_bar=False,
         )
 
-        # Use our own trials list instead of study.best_trial.params because
-        # LLM-overridden trials bypass Optuna's suggest_* and won't have
-        # their params stored in the study object.
         if not self._trials:
             raise RuntimeError('No trials completed')
 
@@ -311,6 +338,135 @@ class AutoTuner:
         if self._llm and hasattr(self._llm, 'decisions'):
             result.llm_decisions = list(self._llm.decisions)
         return result
+
+    def _optimize_multitrack(self) -> OptimizationResult:
+        """Per-track optimization for multi-track MIDI files.
+
+        Each data track is optimized independently with its own detected type
+        and parameter search space. Results are combined into track_overrides.
+        """
+        track_overrides: dict[str, dict[str, Any]] = {}
+        all_trials: list[TrialResult] = []
+        total_score = 0.0
+        stop_reasons: list[str] = []
+        trial_offset = 0
+
+        # Budget: split trials across data tracks
+        num_data_tracks = len(self._per_track_types)
+        trials_per_track = max(3, self.max_trials // num_data_tracks)
+
+        for track_idx, track_type in sorted(self._per_track_types.items()):
+            logger.info('Optimizing track %d (%s), %d trials',
+                        track_idx, track_type, trials_per_track)
+
+            type_hints = TRACK_TYPE_DEFAULTS.get(track_type, TRACK_TYPE_DEFAULTS['other'])
+
+            # Build a single-track MIDI for isolated scoring
+            single_mid = mido.MidiFile(type=1, ticks_per_beat=self.midi_file.ticks_per_beat)
+            # Always include conductor track (track 0)
+            if self.midi_file.tracks:
+                single_mid.tracks.append(copy.deepcopy(self.midi_file.tracks[0]))
+            single_mid.tracks.append(copy.deepcopy(self.midi_file.tracks[track_idx]))
+
+            track_trials: list[TrialResult] = []
+            early_stop = _EarlyStopCallback()
+
+            def make_objective(mid, hints, trials_list, offset):
+                def objective(trial: optuna.Trial) -> float:
+                    params = self._suggest_params_with_hints(trial, hints)
+                    config = self._params_to_config(params)
+                    ctx = PipelineContext(config=config)
+                    pipeline = ProcessingPipeline(config, context=ctx)
+                    processed = pipeline.process(mid)
+                    score, metrics = score_midi(processed)
+
+                    tr = TrialResult(
+                        number=offset + trial.number,
+                        score=score,
+                        params=params,
+                        metrics=metrics,
+                    )
+                    trials_list.append(tr)
+                    if self._callback:
+                        self._callback(tr)
+                    return score
+                return objective
+
+            study = optuna.create_study(direction='maximize',
+                                        sampler=optuna.samplers.TPESampler(seed=42 + track_idx))
+            study.optimize(
+                make_objective(single_mid, type_hints, track_trials, trial_offset),
+                n_trials=trials_per_track,
+                callbacks=[early_stop],
+                show_progress_bar=False,
+            )
+
+            trial_offset += len(track_trials)
+
+            if track_trials:
+                best = max(track_trials, key=lambda t: t.score)
+                total_score += best.score
+                track_overrides[str(track_idx)] = {
+                    'min_duration_ticks': best.params['min_duration'],
+                    'min_velocity': best.params['min_velocity'],
+                    'merge_voices': best.params.get('merge_voices', True),
+                }
+                all_trials.extend(track_trials)
+
+            reason = early_stop.stop_reason or f'max trials ({trials_per_track})'
+            stop_reasons.append(f'Track {track_idx} ({track_type}): {reason}')
+
+        self._trials = all_trials
+
+        # Build combined config with per-track overrides
+        best_config = self._params_to_config(
+            all_trials[0].params if all_trials else self._default_params()
+        )
+        best_config['track_overrides'] = track_overrides
+
+        combined_params = {
+            'track_overrides': track_overrides,
+            'per_track_types': {str(k): v for k, v in self._per_track_types.items()},
+        }
+
+        return OptimizationResult(
+            best_params=combined_params,
+            best_score=round(total_score / max(1, num_data_tracks), 4),
+            best_config=best_config,
+            trials=all_trials,
+            stop_reason='; '.join(stop_reasons),
+            llm_decisions=list(self._llm.decisions) if self._llm and hasattr(self._llm, 'decisions') else [],
+        )
+
+    def _suggest_params_with_hints(self, trial: optuna.Trial,
+                                    hints: dict[str, Any]) -> dict[str, Any]:
+        """Suggest params using specific type hints (for per-track optimization)."""
+        return {
+            'min_duration': trial.suggest_int(
+                'min_duration', hints['min_duration_low'], hints['min_duration_high'], step=10),
+            'min_velocity': trial.suggest_int(
+                'min_velocity', hints['min_velocity_low'], hints['min_velocity_high']),
+            'cluster_window': trial.suggest_int(
+                'cluster_window', hints['cluster_window_low'], hints['cluster_window_high'], step=5),
+            'cluster_pitch': trial.suggest_int('cluster_pitch', 0, 2),
+            'triplet_tolerance': trial.suggest_float(
+                'triplet_tolerance', 0.05, 0.30, step=0.01),
+            'quantize': trial.suggest_categorical('quantize', [True, False]),
+            'remove_triplets': trial.suggest_categorical('remove_triplets', [True, False]),
+            'merge_voices': trial.suggest_categorical('merge_voices', [True, False]),
+            'same_pitch_resolver': trial.suggest_categorical('same_pitch_resolver', [True, False]),
+        }
+
+    @staticmethod
+    def _default_params() -> dict[str, Any]:
+        """Return default params when no trials completed."""
+        return {
+            'min_duration': 120, 'min_velocity': 20,
+            'cluster_window': 20, 'cluster_pitch': 1,
+            'triplet_tolerance': 0.15, 'quantize': True,
+            'remove_triplets': True, 'merge_voices': True,
+            'same_pitch_resolver': True,
+        }
 
     def _objective(self, trial: optuna.Trial) -> float:
         self._maybe_ask_llm(trial.number)
