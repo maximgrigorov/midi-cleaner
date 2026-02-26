@@ -77,32 +77,37 @@ class TestTrackDetection:
 class TestAutoTuner:
 
     def test_optimize_runs_and_returns_result(self, test_midi):
-        """Run optimization with a small trial budget and verify the result shape."""
+        """Run optimization with a small trial budget and verify the result shape.
+
+        The test MIDI file is multi-track, so optimization runs per-track
+        and returns track_overrides in best_params.
+        """
         collected_trials = []
 
         def on_trial(tr):
             collected_trials.append(tr)
 
-        tuner = AutoTuner(test_midi, max_trials=5, callback=on_trial)
+        tuner = AutoTuner(test_midi, max_trials=6, callback=on_trial)
         result = tuner.optimize()
 
         assert isinstance(result, OptimizationResult)
         assert result.best_score is not None
         assert isinstance(result.best_params, dict)
-        assert 'min_duration' in result.best_params
-        assert 'min_velocity' in result.best_params
-        assert 'cluster_window' in result.best_params
-        assert 'cluster_pitch' in result.best_params
-        assert 'triplet_tolerance' in result.best_params
-        assert 'quantize' in result.best_params
-        assert 'remove_triplets' in result.best_params
-        assert 'merge_voices' in result.best_params
 
-        assert len(result.trials) <= 5
+        # Multi-track file -> per-track optimization returns track_overrides
+        assert 'track_overrides' in result.best_params
+        assert 'per_track_types' in result.best_params
+        overrides = result.best_params['track_overrides']
+        assert len(overrides) > 0
+        for track_key, track_params in overrides.items():
+            assert 'min_duration_ticks' in track_params
+            assert 'min_velocity' in track_params
+
         assert len(result.trials) == len(collected_trials)
 
         assert isinstance(result.best_config, dict)
         assert 'min_duration_ticks' in result.best_config
+        assert 'track_overrides' in result.best_config
 
     def test_best_config_runs_through_pipeline(self, test_midi):
         """The config produced by optimization must be accepted by the pipeline."""

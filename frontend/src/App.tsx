@@ -139,18 +139,10 @@ export default function App() {
         } catch {
           // suggestion is optional
         }
-        if (data.num_tracks > 1) {
-          toast({
-            title: 'Multi-track MIDI detected',
-            description: `${data.num_tracks} tracks found. Only single-track files are supported for now. Processing is disabled.`,
-            variant: 'destructive',
-          });
-        } else {
           toast({
             title: 'File loaded',
-            description: `${data.filename} — ${data.num_tracks} track, ${data.ticks_per_beat} TPB`,
+            description: `${data.filename} — ${data.num_tracks} track${data.num_tracks > 1 ? 's' : ''}, ${data.ticks_per_beat} TPB`,
           });
-        }
       } catch {
         toast({ title: 'Upload failed', variant: 'destructive' });
       } finally {
@@ -258,6 +250,7 @@ export default function App() {
   );
 
   const isMultiTrack = (uploadData?.num_tracks ?? 0) > 1;
+  const disabledTracks = (config.disabled_tracks ?? []) as number[];
 
   const handleRestoreSession = useCallback(
     async (fileId: string) => {
@@ -348,7 +341,7 @@ export default function App() {
         isUploading={isUploading}
         showAdvanced={showAdvanced}
         onToggleAdvanced={setShowAdvanced}
-        onOptimize={isMultiTrack ? undefined : handleShowOptimize}
+        onOptimize={handleShowOptimize}
         onReset={() => window.location.reload()}
         onHistory={() => setShowHistory(true)}
         hasFile={!!uploadData}
@@ -380,7 +373,14 @@ export default function App() {
           onProcess={handleProcess}
           selectedTrack={selectedTrack}
           onSelectTrack={setSelectedTrack}
-          isMultiTrack={isMultiTrack}
+          disabledTracks={disabledTracks}
+          onToggleTrack={(idx) => {
+            const current = (config.disabled_tracks ?? []) as number[];
+            const next = current.includes(idx)
+              ? current.filter((i) => i !== idx)
+              : [...current, idx];
+            updateConfig({ disabled_tracks: next } as Partial<MidiConfig>);
+          }}
         />
         <CenterPanel
           result={processResult}

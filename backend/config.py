@@ -51,6 +51,9 @@ DEFAULT_CONFIG = {
     # Per-track overrides: { track_index: { param: value, ... } }
     'track_overrides': {},
 
+    # Disabled tracks: list of track indices to exclude from output entirely
+    'disabled_tracks': [],
+
     # LLM guidance (optional).
     # Inside a podman container, the host is reachable via host.containers.internal
     # (requires --add-host=host.containers.internal:host-gateway on podman run).
